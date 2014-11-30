@@ -1,0 +1,14 @@
+{
+  "name": "parallelshell",
+  "version": "1.0.0",
+  "description": "Invoke multiple commands, running in parallel",
+  "main": "index.js",
+  "bin": {
+    "parallelshell": "./index.js"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Keith Cirkel <npm@keithcirkel.co.uk> (http://keithcirkel.co.uk/)",
+  "license": "MIT"
+}
