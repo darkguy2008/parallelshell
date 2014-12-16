@@ -2,6 +2,14 @@
   "name": "parallelshell",
   "version": "1.0.0",
   "description": "Invoke multiple commands, running in parallel",
+  "homepage": "https://github.com/keithamus/parallelshell",
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:keithamus/parallelshell.git"
+  },
+  "bugs": {
+    "url": "https://github.com/keithamus/parallelshell/issues"
+  },
   "main": "index.js",
   "bin": {
     "parallelshell": "./index.js"
@@ -9,6 +17,10 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
+  "keywords": [
+    "parallel",
+    "shell"
+  ],
   "author": "Keith Cirkel <npm@keithcirkel.co.uk> (http://keithcirkel.co.uk/)",
   "license": "MIT"
 }
