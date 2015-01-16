@@ -3,7 +3,7 @@
 var exec = require('child_process').exec;
 
 function potentialExit (childCmd, code) {
-    code = code.code || code;
+    code = code? (code.code || code) : code;
     if (code > 0) {
         console.error('`' + childCmd + '` failed with exit code ' + code);
         process.exit(code);
