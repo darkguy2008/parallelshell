@@ -13,7 +13,7 @@ function potentialExit (childCmd, code) {
 process.argv.slice(2).forEach(function (childCmd) {
     var child = exec(childCmd, {
         cwd: process.cwd(),
-        env: process.env,
+        env: process.env
     })
     .on('error', potentialExit.bind(null, childCmd))
     .on('exit', potentialExit.bind(null, childCmd));
