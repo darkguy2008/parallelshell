@@ -16,7 +16,6 @@ if (process.platform === 'win32') {
     shFlag = '/c';
 }
 process.argv.slice(2).forEach(function (childCmd) {
-    console.log('spawning '+childCmd);
     var child = spawn(sh,[shFlag,childCmd], {
         cwd: process.cwd,
         env: process.env,
