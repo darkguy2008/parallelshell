@@ -1,3 +1,9 @@
+### v1.1.1
+
+ - [#11](https://github.com/keithamus/parallelshell/pull/11) Fix regression
+   where shebang went missing. Fixes issues with Mac finding binary.
+   ([@eliias](https://github.com/eliias))
+
 ### v1.1.0
 
  - [#9](https://github.com/keithamus/parallelshell/pull/9) Add shell colour
