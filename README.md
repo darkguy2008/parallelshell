@@ -31,3 +31,11 @@ This will execute the commands `echo 1` `echo 2` and `echo 3` simultaneously.
 
 Note that on Windows, you need to use double-quotes to avoid confusing the
 argument parser.
+
+Available options:
+```
+-h, --help         output usage information
+-v, --verbose      verbose logging
+-w, --wait         will not close silbling processes on error
+
+```
