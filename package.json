@@ -15,12 +15,18 @@
     "parallelshell": "./index.js"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "mocha"
   },
   "keywords": [
     "parallel",
     "shell"
   ],
   "author": "Keith Cirkel <npm@keithcirkel.co.uk> (http://keithcirkel.co.uk/)",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "bluebird": "^2.9.25",
+    "chai": "^2.3.0",
+    "coffee-script": "^1.9.2",
+    "mocha": "^2.2.4"
+  }
 }
