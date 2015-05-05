@@ -15,7 +15,7 @@
     "parallelshell": "./index.js"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "mocha"
   },
   "keywords": [
     "parallel",
@@ -23,10 +23,10 @@
   ],
   "author": "Keith Cirkel <npm@keithcirkel.co.uk> (http://keithcirkel.co.uk/)",
   "license": "MIT",
-  "scripts":{
-    "test1": "node ./index.js \"node test/willNotExit.js\"",
-    "test2": "node ./index.js --verbose \"node test/willThrowError.js\" \"node test/willNotExit.js\"",
-    "test3": "node ./index.js --verbose --wait \"node test/willThrowError.js\" \"node test/willNotExit.js\"",
-    "test4": "node ./index.js --help"
+  "devDependencies": {
+    "bluebird": "^2.9.25",
+    "chai": "^2.3.0",
+    "coffee-script": "^1.9.2",
+    "mocha": "^2.2.4"
   }
 }

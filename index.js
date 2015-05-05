@@ -34,7 +34,7 @@ for (i = 0, len = args.length; i < len; i++) {
 // called on close of a child process
 function childClose (code) {
     var i, len;
-    code = code? (code.code || code) : code;
+    code = code ? (code.code || code) : code;
     if (verbose) {
         if (code > 0) {
             console.error('`' + this.cmd + '` failed with exit code ' + code);
@@ -42,7 +42,7 @@ function childClose (code) {
             console.log('`' + this.cmd + '` ended successfully');
         }
     }
-    if (code > 0 && !wait) close();
+    if (code > 0 && !wait) close(code);
     status();
 }
 
@@ -65,7 +65,7 @@ function status () {
 }
 
 // closes all children and the process
-function close () {
+function close (code) {
     var i, len;
     for (i = 0, len = children.length; i < len; i++) {
         if (!children[i].exitCode) {
@@ -74,7 +74,7 @@ function close () {
             if (verbose) console.log('`' + children[i].cmd + '` will now be closed');
         }
     }
-    process.exit();
+    process.exit(code);
 }
 
 // cross platform compatibility
