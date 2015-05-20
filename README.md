@@ -36,6 +36,6 @@ Available options:
 ```
 -h, --help         output usage information
 -v, --verbose      verbose logging
--w, --wait         will not close silbling processes on error
+-w, --wait         will not close sibling processes on error
 
 ```
