@@ -22,7 +22,7 @@ for (i = 0, len = args.length; i < len; i++) {
             case '--help':
                 console.log('-h, --help         output usage information');
                 console.log('-v, --verbose      verbose logging')
-                console.log('-w, --wait         will not close silbling processes on error')
+                console.log('-w, --wait         will not close sibling processes on error')
                 process.exit();
                 break;
         }

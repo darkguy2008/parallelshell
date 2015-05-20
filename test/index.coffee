@@ -19,7 +19,7 @@ failingProcess = "\\\"node -e 'throw new Error(\"someError\");'\\\""
 usageInfo = """
 -h, --help         output usage information
 -v, --verbose      verbose logging
--w, --wait         will not close silbling processes on error
+-w, --wait         will not close sibling processes on error
 """.split("\n")
 
 spawnParallelshell = (cmd) ->
@@ -60,13 +60,13 @@ describe "parallelshell", ->
       done()
     ),100
 
-  it "should close silbling processes on child error", (done) ->
+  it "should close sibling processes on child error", (done) ->
     ps = spawnParallelshell([waitingProcess,failingProcess,waitingProcess].join(" "))
     ps.on "close", () ->
       ps.exitCode.should.equal 2
       done()
 
-  it "should wait for silbling processes on child error when called with -w or --wait", (done) ->
+  it "should wait for sibling processes on child error when called with -w or --wait", (done) ->
     ps = spawnParallelshell(["-w",waitingProcess,failingProcess,waitingProcess].join(" "))
     ps2 = spawnParallelshell(["--wait",waitingProcess,failingProcess,waitingProcess].join(" "))
     setTimeout (() ->
