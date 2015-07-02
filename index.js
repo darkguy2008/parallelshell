@@ -70,7 +70,11 @@ function close (code) {
     for (i = 0, len = children.length; i < len; i++) {
         if (!children[i].exitCode) {
             children[i].removeAllListeners('close');
-            children[i].kill('SIGINT');
+            if (process.platform === 'win32') {
+                children[i].kill("SIGINT")
+            } else {
+                spawn(sh,[shFlag,'kill -TERM -'+children[i].pid])
+            }
             if (verbose) console.log('`' + children[i].cmd + '` will now be closed');
         }
     }
@@ -92,6 +96,7 @@ cmds.forEach(function (cmd) {
     var child = spawn(sh,[shFlag,cmd], {
         cwd: process.cwd,
         env: process.env,
+        detached: true,
         stdio: ['pipe', process.stdout, process.stderr]
     })
     .on('close', childClose);
