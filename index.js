@@ -66,19 +66,27 @@ function status () {
 
 // closes all children and the process
 function close (code) {
-    var i, len;
+    var i, len, close = 0, opened = 0;
+    if (children.length == 1) process.exit(code);
     for (i = 0, len = children.length; i < len; i++) {
         if (!children[i].exitCode) {
+            opened++;
             children[i].removeAllListeners('close');
             if (process.platform === 'win32') {
-                children[i].kill("SIGINT")
+                children[i].kill("SIGINT");
             } else {
-                spawn(sh,[shFlag,'kill -TERM -'+children[i].pid])
+                spawn(sh,[shFlag,'kill -TERM -'+children[i].pid]);
             }
             if (verbose) console.log('`' + children[i].cmd + '` will now be closed');
+            children[i].on('close', function() {
+                closed++;
+                if (opened == closed) {
+                    process.exit(code);
+                }
+            });
         }
     }
-    process.exit(code);
+
 }
 
 // cross platform compatibility
