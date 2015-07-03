@@ -68,7 +68,7 @@ function status () {
 
 // closes all children and the process
 function close (code) {
-    var i, len, close = 0, opened = 0;
+    var i, len, closed = 0, opened = 0;
 
     for (i = 0, len = children.length; i < len; i++) {
         if (!children[i].exitCode) {
