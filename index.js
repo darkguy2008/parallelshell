@@ -66,15 +66,24 @@ function status () {
 
 // closes all children and the process
 function close (code) {
-    var i, len;
+    var i, len, closed = 0, opened = 0;
+
     for (i = 0, len = children.length; i < len; i++) {
         if (!children[i].exitCode) {
+            opened++;
             children[i].removeAllListeners('close');
-            children[i].kill('SIGINT');
+            children[i].kill("SIGINT");
             if (verbose) console.log('`' + children[i].cmd + '` will now be closed');
+            children[i].on('close', function() {
+                closed++;
+                if (opened == closed) {
+                    process.exit(code);
+                }
+            });
         }
     }
-    process.exit(code);
+    if (opened == closed) {process.exit(code);}
+
 }
 
 // cross platform compatibility
@@ -89,6 +98,9 @@ if (process.platform === 'win32') {
 // start the children
 children = [];
 cmds.forEach(function (cmd) {
+    if (process.platform != 'win32') {
+      cmd = "exec "+cmd;
+    }
     var child = spawn(sh,[shFlag,cmd], {
         cwd: process.cwd,
         env: process.env,
