@@ -72,11 +72,7 @@ function close (code) {
         if (!children[i].exitCode) {
             opened++;
             children[i].removeAllListeners('close');
-            if (process.platform === 'win32') {
-                children[i].kill("SIGINT");
-            } else {
-                spawn(sh,[shFlag,'kill -TERM -'+children[i].pid]);
-            }
+            children[i].kill("SIGINT");
             if (verbose) console.log('`' + children[i].cmd + '` will now be closed');
             children[i].on('close', function() {
                 closed++;
@@ -86,7 +82,7 @@ function close (code) {
             });
         }
     }
-    if (opened == closed) process.exit(code);
+    if (opened == closed) {process.exit(code);}
 
 }
 
@@ -102,10 +98,12 @@ if (process.platform === 'win32') {
 // start the children
 children = [];
 cmds.forEach(function (cmd) {
+    if (process.platform != 'win32') {
+      cmd = "exec "+cmd;
+    }
     var child = spawn(sh,[shFlag,cmd], {
         cwd: process.cwd,
         env: process.env,
-        detached: true,
         stdio: ['pipe', process.stdout, process.stderr]
     })
     .on('close', childClose);
