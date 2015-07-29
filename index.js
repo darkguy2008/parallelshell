@@ -47,49 +47,55 @@ function childClose (code) {
     code = code ? (code.code || code) : code;
     if (verbose) {
         if (code > 0) {
-            console.error('`' + this.cmd + '` failed with exit code ' + code);
+            console.error('parallelshell: `' + this.cmd + '` failed with exit code ' + code);
         } else {
-            console.log('`' + this.cmd + '` ended successfully');
+            console.log('parallelshell: `' + this.cmd + '` ended successfully');
         }
     }
+<<<<<<< HEAD
     if (first || code > 0 && !wait) close(code);
     status();
+=======
+    if (code > 0 && !wait) close(code);
+>>>>>>> dev2
 }
 
 function status () {
     if (verbose) {
         var i, len;
-        console.log('\n');
-        console.log('### Status ###');
+        console.log('parallelshell: Status');
         for (i = 0, len = children.length; i < len; i++) {
             if (children[i].exitCode === null) {
-                console.log('`' + children[i].cmd + '` is still running');
+                console.log('parallelshell: `' + children[i].cmd + '` is still running');
             } else if (children[i].exitCode > 0) {
-                console.log('`' + children[i].cmd + '` errored');
+                console.log('parallelshell: `' + children[i].cmd + '` errored');
             } else {
-                console.log('`' + children[i].cmd + '` finished');
+                console.log('parallelshell: `' + children[i].cmd + '` finished');
             }
         }
-        console.log('\n');
     }
 }
 
 // closes all children and the process
 function close (code) {
-    var i, len, closed = 0, opened = 0;
+    var i, len, closeHandler, closed = 0, opened = 0;
 
     for (i = 0, len = children.length; i < len; i++) {
         if (!children[i].exitCode) {
             opened++;
             children[i].removeAllListeners('close');
             children[i].kill("SIGINT");
-            if (verbose) console.log('`' + children[i].cmd + '` will now be closed');
-            children[i].on('close', function() {
-                closed++;
-                if (opened == closed) {
-                    process.exit(code);
-                }
-            });
+            if (verbose) console.log('parallelshell: `' + children[i].cmd + '` will now be closed');
+            closeHandler = function (child) {
+                child.on('close', function() {
+                    if (verbose) console.log('parallelshell: `' + child.cmd + '` closed successfully');
+                    closed++;
+                    if (opened == closed) {
+                        process.exit(code);
+                    }
+                });
+            }(children[i])
+            
         }
     }
     if (opened == closed) {process.exit(code);}
@@ -109,12 +115,15 @@ if (process.platform === 'win32') {
 children = [];
 cmds.forEach(function (cmd) {
     if (process.platform != 'win32') {
-      cmd = "exec "+cmd;
+        cmd = "exec "+cmd;
+    } else {
+        cmd = cmd.replace(/'/g,"\"");
     }
     var child = spawn(sh,[shFlag,cmd], {
         cwd: process.cwd,
         env: process.env,
-        stdio: ['pipe', process.stdout, process.stderr]
+        stdio: ['pipe', process.stdout, process.stderr],
+        windowsVerbatimArguments: process.platform === 'win32'
     })
     .on('close', childClose);
     child.cmd = cmd
@@ -122,4 +131,11 @@ cmds.forEach(function (cmd) {
 });
 
 // close all children on ctrl+c
-process.on('SIGINT', close)
+process.on('SIGINT', function() {
+    if (verbose) console.log('parallelshell: recieved SIGINT');
+    close();
+});
+
+process.on('exit', function(code) {
+    if (verbose) console.log('parallelshell: exit code:', code);
+});
