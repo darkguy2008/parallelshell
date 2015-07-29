@@ -14,7 +14,8 @@ else
   shArg = "-c"
 
 # children
-waitingProcess = "\"node -e 'setTimeout(function(){},10000);'\""
+waitingProcess = (time=10000) ->
+  return "\"node -e 'setTimeout(function(){},#{time});'\""
 failingProcess = "\"node -e 'throw new Error();'\""
 
 usageInfo = """
@@ -53,17 +54,21 @@ spyOnPs = (ps, verbosity=1) ->
     ps.stderr.on "data", (data) ->
       console.log "err: "+data
 
-testOutput = (cmd, expectedOutput) ->
+testOutput = (cmd, expectedOutput, std="out") ->
   return new Promise (resolve) ->
     ps = spawnParallelshell(cmd)
+    if std == "out"
+      std = ps.stdout
+    else
+      std = ps.stderr
     spyOnPs ps, 3
-    ps.stdout.setEncoding("utf8")
+    std.setEncoding("utf8")
     output = []
-    ps.stdout.on "data", (data) ->
+    std.on "data", (data) ->
       lines = data.split("\n")
       lines.pop() if lines[lines.length-1] == ""
       output = output.concat(lines)
-    ps.stdout.on "end", () ->
+    std.on "end", () ->
       for line,i in expectedOutput
         line.should.equal output[i]
       resolve()
@@ -82,7 +87,7 @@ describe "parallelshell", ->
       done()
 
   it "should run with a normal child", (done) ->
-    ps = spawnParallelshell(waitingProcess)
+    ps = spawnParallelshell(waitingProcess())
     spyOnPs ps, 1
     ps.on "close", () ->
       done()
@@ -93,7 +98,7 @@ describe "parallelshell", ->
 
 
   it "should close sibling processes on child error", (done) ->
-    ps = spawnParallelshell([waitingProcess,failingProcess].join(" "))
+    ps = spawnParallelshell([waitingProcess(),failingProcess].join(" "))
     spyOnPs ps,2
     ps.on "exit", () ->
       ps.exitCode.should.equal 1
@@ -103,8 +108,8 @@ describe "parallelshell", ->
       done()
 
   it "should wait for sibling processes on child error when called with -w or --wait", (done) ->
-    ps = spawnParallelshell(["-w",waitingProcess,failingProcess].join(" "))
-    ps2 = spawnParallelshell(["--wait",waitingProcess,failingProcess].join(" "))
+    ps = spawnParallelshell(["-w",waitingProcess(),failingProcess].join(" "))
+    ps2 = spawnParallelshell(["--wait",waitingProcess(),failingProcess].join(" "))
     spyOnPs ps,2
     spyOnPs ps2,2
     setTimeout (() ->
@@ -118,7 +123,7 @@ describe "parallelshell", ->
     .then -> done()
     .catch done
   it "should close on CTRL+C / SIGINT", (done) ->
-    ps = spawnParallelshell(["-w",waitingProcess].join(" "))
+    ps = spawnParallelshell(["-w",waitingProcess()].join(" "))
     spyOnPs ps,2
     ps.on "close", () ->
       done()
@@ -147,5 +152,19 @@ describe "parallelshell", ->
     else
       setString = "test=test1 "
     testOutput("\"#{setString}node -e 'console.log(process.env.test);'\"", output)
+    .then done
+    .catch done
+  
+  it "should work with first", (done) ->
+    ps = spawnParallelshell(["--first",waitingProcess(10),waitingProcess(10000)].join(" "))
+    ps.on "close", () ->
+      ps.exitCode.should.equal 0
+      done()
+    ps.on "exit", () ->
+      ps.exitCode.should.equal 0
+      done()
+
+  it "should not work with first and wait", (done) ->
+    testOutput("--wait --first", ["--wait and --first cannot be used together"], "err")
     .then done
     .catch done

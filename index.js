@@ -52,12 +52,7 @@ function childClose (code) {
             console.log('parallelshell: `' + this.cmd + '` ended successfully');
         }
     }
-<<<<<<< HEAD
     if (first || code > 0 && !wait) close(code);
-    status();
-=======
-    if (code > 0 && !wait) close(code);
->>>>>>> dev2
 }
 
 function status () {
