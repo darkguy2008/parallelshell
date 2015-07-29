@@ -25,9 +25,6 @@ usageInfo = """
 """.split("\n")
 
 cmdWrapper = (cmd) ->
-  if process.platform != "win32"
-    cmd = "exec "+cmd
-
   if verbose
     console.log "Calling: "+cmd
   return cmd
@@ -36,14 +33,17 @@ spawnParallelshell = (cmd) ->
   return spawn sh, [shArg, cmdWrapper("node ./index.js "+cmd )], {
     cwd: process.cwd
     windowsVerbatimArguments: process.platform == 'win32'
+    detached: process.platform != 'win32'
   }
 
 killPs = (ps) ->
-  if process.platform != "win32"
-    ps.kill "SIGINT"
-  else
+  if verbose
+    console.log "killing"
+  if process.platform == "win32"
     killer = spawn sh, [shArg, "taskkill /F /T /PID "+ps.pid]
-    spyOnPs killer, 3
+  else
+    killer = spawn sh, [shArg, "kill -INT -"+ps.pid]
+  spyOnPs killer, 3
 
 spyOnPs = (ps, verbosity=1) ->
   if verbose >= verbosity
@@ -103,9 +103,6 @@ describe "parallelshell", ->
     ps.on "exit", () ->
       ps.exitCode.should.equal 1
       done()
-    ps.on "close", () ->
-      ps.exitCode.should.equal 1
-      done()
 
   it "should wait for sibling processes on child error when called with -w or --wait", (done) ->
     ps = spawnParallelshell(["-w",waitingProcess(),failingProcess].join(" "))
@@ -154,12 +151,9 @@ describe "parallelshell", ->
     testOutput("\"#{setString}node -e 'console.log(process.env.test);'\"", output)
     .then done
     .catch done
-  
+
   it "should work with first", (done) ->
     ps = spawnParallelshell(["--first",waitingProcess(10),waitingProcess(10000)].join(" "))
-    ps.on "close", () ->
-      ps.exitCode.should.equal 0
-      done()
     ps.on "exit", () ->
       ps.exitCode.should.equal 0
       done()
