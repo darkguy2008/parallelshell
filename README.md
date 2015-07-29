@@ -51,6 +51,13 @@ This will execute the commands `echo 1` `echo 2` and `echo 3` simultaneously.
 Note that on Windows, you need to use double-quotes to avoid confusing the
 argument parser.
 
+##### Nested usage
+
+```bash
+parallelshell "echo 1" "parallelshell 'echo 2' 'parallelshell \'echo 3\' \'parallelshell \'\'echo 4\'\' \''"
+```
+Closing on Windows will be unreliable in this case..
+
 Available options:
 ```
 -h, --help         output usage information

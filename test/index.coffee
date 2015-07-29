@@ -26,6 +26,7 @@ usageInfo = """
 cmdWrapper = (cmd) ->
   if process.platform != "win32"
     cmd = "exec "+cmd
+
   if verbose
     console.log "Calling: "+cmd
   return cmd
@@ -33,10 +34,15 @@ cmdWrapper = (cmd) ->
 spawnParallelshell = (cmd) ->
   return spawn sh, [shArg, cmdWrapper("node ./index.js "+cmd )], {
     cwd: process.cwd
+    windowsVerbatimArguments: process.platform == 'win32'
   }
 
 killPs = (ps) ->
-  ps.kill "SIGINT"
+  if process.platform != "win32"
+    ps.kill "SIGINT"
+  else
+    killer = spawn sh, [shArg, "taskkill /F /T /PID "+ps.pid]
+    spyOnPs killer, 3
 
 spyOnPs = (ps, verbosity=1) ->
   if verbose >= verbosity
@@ -79,25 +85,26 @@ describe "parallelshell", ->
     ps = spawnParallelshell(waitingProcess)
     spyOnPs ps, 1
     ps.on "close", () ->
-      ps.signalCode.should.equal "SIGINT"
       done()
-
     setTimeout (() ->
       should.not.exist(ps.signalCode)
       killPs(ps)
-    ),50
+    ),150
 
 
   it "should close sibling processes on child error", (done) ->
-    ps = spawnParallelshell([waitingProcess,failingProcess,waitingProcess].join(" "))
+    ps = spawnParallelshell([waitingProcess,failingProcess].join(" "))
     spyOnPs ps,2
+    ps.on "exit", () ->
+      ps.exitCode.should.equal 1
+      done()
     ps.on "close", () ->
       ps.exitCode.should.equal 1
       done()
 
   it "should wait for sibling processes on child error when called with -w or --wait", (done) ->
-    ps = spawnParallelshell(["-w",waitingProcess,failingProcess,waitingProcess].join(" "))
-    ps2 = spawnParallelshell(["--wait",waitingProcess,failingProcess,waitingProcess].join(" "))
+    ps = spawnParallelshell(["-w",waitingProcess,failingProcess].join(" "))
+    ps2 = spawnParallelshell(["--wait",waitingProcess,failingProcess].join(" "))
     spyOnPs ps,2
     spyOnPs ps2,2
     setTimeout (() ->
@@ -105,15 +112,40 @@ describe "parallelshell", ->
       should.not.exist(ps2.signalCode)
       killPs(ps)
       killPs(ps2)
-    ),50
+    ),250
     Promise.all [new Promise((resolve) -> ps.on("close",resolve)),
       new Promise (resolve) -> ps2.on("close",resolve)]
     .then -> done()
     .catch done
   it "should close on CTRL+C / SIGINT", (done) ->
-    ps = spawnParallelshell(["-w",waitingProcess,failingProcess,waitingProcess].join(" "))
+    ps = spawnParallelshell(["-w",waitingProcess].join(" "))
     spyOnPs ps,2
     ps.on "close", () ->
-      ps.signalCode.should.equal "SIGINT"
       done()
     killPs(ps)
+  it "should work with chained commands", (done) ->
+    output = ["1","2"]
+    if process.platform == "win32"
+      output[0] += "\r"
+      output[1] += "\r"
+    testOutput("\"echo 1&& echo 2\"", output)
+    .then done
+    .catch done
+  it "should work nested", (done) ->
+    output = ["1","2"]
+    if process.platform == "win32"
+      output[0] += "\r"
+      output[1] += "\r"
+    testOutput("\"echo 1\" \"node ./index.js 'echo 2'\"", output)
+    .then done
+    .catch done
+
+  it "should work with setting ENV", (done) ->
+    output = ["test1"]
+    if process.platform == "win32"
+      setString = "set test=test1&"
+    else
+      setString = "test=test1 "
+    testOutput("\"#{setString}node -e 'console.log(process.env.test);'\"", output)
+    .then done
+    .catch done
