@@ -3,7 +3,7 @@
 'use strict';
 var spawn = require('child_process').spawn;
 
-var sh, shFlag, children, args, wait, cmds, verbose, i ,len;
+var sh, shFlag, children, args, wait, first, cmds, verbose, i ,len;
 // parsing argv
 cmds = [];
 args = process.argv.slice(2);
@@ -14,6 +14,10 @@ for (i = 0, len = args.length; i < len; i++) {
             case '--wait':
                 wait = true;
                 break;
+            case '-f':
+            case '--first':
+                first = true;
+                break;
             case '-v':
             case '--verbose':
                 verbose = true;
@@ -21,14 +25,20 @@ for (i = 0, len = args.length; i < len; i++) {
             case '-h':
             case '--help':
                 console.log('-h, --help         output usage information');
-                console.log('-v, --verbose      verbose logging')
-                console.log('-w, --wait         will not close sibling processes on error')
+                console.log('-v, --verbose      verbose logging');
+                console.log('-w, --wait         will not close sibling processes on error');
+                console.log('-f, --first        close all sibling processes after first exits (succes/error)');
                 process.exit();
                 break;
         }
     } else {
         cmds.push(args[i]);
     }
+}
+
+if (wait && first) {
+  console.error('--wait and --first cannot be used together');
+  process.exit(1);
 }
 
 // called on close of a child process
@@ -42,7 +52,7 @@ function childClose (code) {
             console.log('`' + this.cmd + '` ended successfully');
         }
     }
-    if (code > 0 && !wait) close(code);
+    if (first || code > 0 && !wait) close(code);
     status();
 }
 
