@@ -51,6 +51,15 @@ This will execute the commands `echo 1` `echo 2` and `echo 3` simultaneously.
 Note that on Windows, you need to use double-quotes to avoid confusing the
 argument parser.
 
+#### Setting The Current Working Directory (CWD)
+
+To run a command in a specified directory, pass a JSON array with the first element as the CWD and the second element as the command:
+
+```bash
+parallelshell '["/some/folder","some command"]'
+```
+**Note**: Due to how JSON.parse works, string input in the arrays need to be in double quotes.
+
 Available options:
 ```
 -h, --help         output usage information
