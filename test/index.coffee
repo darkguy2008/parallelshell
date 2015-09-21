@@ -19,9 +19,10 @@ waitingProcess = (time=10000) ->
 failingProcess = "\"node -e 'throw new Error();'\""
 
 usageInfo = """
--h, --help         output usage information
--v, --verbose      verbose logging
--w, --wait         will not close sibling processes on error
+Useage:
+  -h, --help         output usage information
+  -v, --verbose      verbose logging
+  -w, --wait         will not close sibling processes on error
 """.split("\n")
 
 cmdWrapper = (cmd) ->
