@@ -16,6 +16,8 @@ else
 # children
 waitingProcess = (time=10000) ->
   return "\"node -e 'setTimeout(function(){},#{time});'\""
+waitingFailingProcess = (time=10000) ->
+  return "\"node -e 'setTimeout(function(){ throw new Error(); },#{time});'\""
 failingProcess = "\"node -e 'throw new Error();'\""
 
 usageInfo = """
@@ -86,6 +88,13 @@ describe "parallelshell", ->
       ps.exitCode.should.equal 1
       done()
 
+  it "should close with exitCode 1 on delayed child error", (done) ->
+    ps = spawnParallelshell([waitingFailingProcess(100),waitingProcess(1),waitingProcess(500)].join(" "))
+    spyOnPs ps, 2
+    ps.on "exit", () ->
+      ps.exitCode.should.equal 1
+      done()
+
   it "should run with a normal child", (done) ->
     ps = spawnParallelshell(waitingProcess())
     spyOnPs ps, 1
@@ -95,7 +104,6 @@ describe "parallelshell", ->
       should.not.exist(ps.signalCode)
       killPs(ps)
     ),150
-
 
   it "should close sibling processes on child error", (done) ->
     ps = spawnParallelshell([waitingProcess(),failingProcess].join(" "))

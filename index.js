@@ -76,7 +76,7 @@ function close (code) {
     var i, len, closeHandler, closed = 0, opened = 0;
 
     for (i = 0, len = children.length; i < len; i++) {
-        if (!children[i].exitCode) {
+        if (children[i].exitCode === null) {
             opened++;
             children[i].removeAllListeners('close');
             if (process.platform != "win32") {
