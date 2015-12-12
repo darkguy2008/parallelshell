@@ -12,7 +12,8 @@
   },
   "main": "index.js",
   "bin": {
-    "parallelshell": "./index.js"
+    "parallelshell": "./index.js",
+    "pshell":"./index.js"
   },
   "scripts": {
     "test": "mocha"
