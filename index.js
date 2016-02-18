@@ -3,7 +3,7 @@
 'use strict';
 var spawn = require('child_process').spawn;
 
-var sh, shFlag, children, args, wait, cmds, verbose, i ,len;
+var sh, shFlag, children, args, wait, cmds, verbose, i ,len, input;
 // parsing argv
 cmds = [];
 args = process.argv.slice(2);
@@ -18,10 +18,15 @@ for (i = 0, len = args.length; i < len; i++) {
             case '--verbose':
                 verbose = true;
                 break;
+            case '-i':
+            case '--input':
+                input = true;
+                break;
             case '-h':
             case '--help':
                 console.log('-h, --help         output usage information');
                 console.log('-v, --verbose      verbose logging')
+                console.log('-i, --input        link stdin to last command')
                 console.log('-w, --wait         will not close sibling processes on error')
                 process.exit();
                 break;
@@ -96,15 +101,16 @@ if (process.platform === 'win32') {
 }
 
 // start the children
-children = [];
+children = []; var cnt = 0;
 cmds.forEach(function (cmd) {
+    cnt++;
     if (process.platform != 'win32') {
       cmd = "exec "+cmd;
     }
     var child = spawn(sh,[shFlag,cmd], {
         cwd: process.cwd,
         env: process.env,
-        stdio: ['pipe', process.stdout, process.stderr]
+        stdio: input && cnt == cmds.length ? [process.stdin, process.stdout, process.stderr] : ['pipe', process.stdout, process.stderr]
     })
     .on('close', childClose);
     child.cmd = cmd
