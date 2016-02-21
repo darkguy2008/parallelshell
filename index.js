@@ -3,7 +3,7 @@
 'use strict';
 var spawn = require('child_process').spawn;
 
-var sh, shFlag, children, args, wait, cmds, verbose, i ,len;
+var sh, shFlag, children, args, wait, cmds, verbose, i, len;
 // parsing argv
 cmds = [];
 args = process.argv.slice(2);
@@ -21,8 +21,8 @@ for (i = 0, len = args.length; i < len; i++) {
             case '-h':
             case '--help':
                 console.log('-h, --help         output usage information');
-                console.log('-v, --verbose      verbose logging')
-                console.log('-w, --wait         will not close sibling processes on error')
+                console.log('-v, --verbose      verbose logging');
+                console.log('-w, --wait         will not close sibling processes on error');
                 process.exit();
                 break;
         }
@@ -33,7 +33,6 @@ for (i = 0, len = args.length; i < len; i++) {
 
 // called on close of a child process
 function childClose (code) {
-    var i, len;
     code = code ? (code.code || code) : code;
     if (verbose) {
         if (code > 0) {
@@ -72,18 +71,17 @@ function close (code) {
         if (!children[i].exitCode) {
             opened++;
             children[i].removeAllListeners('close');
-            children[i].kill("SIGINT");
+            children[i].kill('SIGINT');
             if (verbose) console.log('`' + children[i].cmd + '` will now be closed');
-            children[i].on('close', function() {
+            children[i].on('close', function () {
                 closed++;
-                if (opened == closed) {
+                if (opened === closed) {
                     process.exit(code);
                 }
             });
         }
     }
-    if (opened == closed) {process.exit(code);}
-
+    if (opened === closed) process.exit(code);
 }
 
 // cross platform compatibility
@@ -92,24 +90,24 @@ if (process.platform === 'win32') {
     shFlag = '/c';
 } else {
     sh = 'sh';
-    shFlag = '-c';
+    shFlag = '-ca';
 }
 
 // start the children
 children = [];
 cmds.forEach(function (cmd) {
-    if (process.platform != 'win32') {
-      cmd = "exec "+cmd;
+    if (process.platform !== 'win32') {
+      cmd = 'exec ' + cmd;
     }
-    var child = spawn(sh,[shFlag,cmd], {
+    var child = spawn(sh, [shFlag, cmd], {
         cwd: process.cwd,
         env: process.env,
         stdio: ['pipe', process.stdout, process.stderr]
     })
     .on('close', childClose);
-    child.cmd = cmd
-    children.push(child)
+    child.cmd = cmd;
+    children.push(child);
 });
 
 // close all children on ctrl+c
-process.on('SIGINT', close)
+process.on('SIGINT', close);
