@@ -94,13 +94,13 @@ if (process.platform === 'win32') {
   shFlag = '/c'
 } else {
   sh = 'sh'
-  shFlag = '-ca'
+  shFlag = '-c'
 }
 
 // start the children
 children = []
 cmds.forEach(function (cmd) {
-  if (process.platform !== 'win32') {
+  if (process.platform !== 'win32' && process.platform !== 'darwin') {
     cmd = 'exec ' + cmd
   }
   var child = spawn(sh, [shFlag, cmd], {
