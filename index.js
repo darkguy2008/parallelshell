@@ -47,7 +47,8 @@ function childClose (code) {
 
 function status () {
   if (verbose) {
-    var i, len
+    var i
+    var len
     console.log('\n')
     console.log('### Status ###')
     for (i = 0, len = children.length; i < len; i++) {
@@ -65,7 +66,10 @@ function status () {
 
 // closes all children and the process
 function close (code) {
-  var i, len, closed = 0, opened = 0
+  var i
+  var len
+  var closed = 0
+  var opened = 0
 
   for (i = 0, len = children.length; i < len; i++) {
     if (!children[i].exitCode) {
@@ -104,7 +108,7 @@ cmds.forEach(function (cmd) {
     env: process.env,
     stdio: ['pipe', process.stdout, process.stderr]
   })
-    .on('close', childClose)
+  .on('close', childClose)
   child.cmd = cmd
   children.push(child)
 })
