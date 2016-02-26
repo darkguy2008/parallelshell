@@ -32,7 +32,7 @@ cmdWrapper = (cmd) ->
 
 spawnParallelshell = (cmd) ->
   return spawn sh, [shArg, cmdWrapper("node ./index.js "+cmd )], {
-    cwd: process.cwd
+    cwd: process.cwd()
   }
 
 killPs = (ps) ->
