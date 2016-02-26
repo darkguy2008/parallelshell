@@ -48,6 +48,15 @@ parallelshell "echo 1" "echo 2" "echo 3"
 
 This will execute the commands `echo 1` `echo 2` and `echo 3` simultaneously.
 
+You can also specify the working directory of each command individually by
+prefixing the command with `CWD=path/to/directory`. For example:
+
+```bash
+parallelshell "echo 1" "CWD=/tmp/ echo $PWD" "CWD=/etc/ echo $PWD"
+```
+
+`CWD=` must be at the beginning of the command string.
+
 Note that on Windows, you need to use double-quotes to avoid confusing the
 argument parser.
 

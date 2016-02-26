@@ -98,11 +98,18 @@ if (process.platform === 'win32') {
 // start the children
 children = [];
 cmds.forEach(function (cmd) {
+    var reCWD = /^CWD=([^\s]+)/;
+    var cwd = reCWD.exec(cmd);
+
+    if (cwd) {
+        cmd = cmd.replace(cwd[0], '');
+    }
+
     if (process.platform != 'win32') {
       cmd = "exec "+cmd;
     }
     var child = spawn(sh,[shFlag,cmd], {
-        cwd: process.cwd(),
+        cwd: (cwd && cwd[1]) || process.cwd(),
         env: process.env,
         stdio: ['pipe', process.stdout, process.stderr]
     })

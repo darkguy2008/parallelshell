@@ -1,3 +1,4 @@
+path = require "path"
 chai = require "chai"
 should = chai.should()
 spawn = require("child_process").spawn
@@ -16,6 +17,7 @@ else
 # children
 waitingProcess = "\"node -e 'setTimeout(function(){},10000);'\""
 failingProcess = "\"node -e 'throw new Error();'\""
+cwdProcess = "\"CWD=test node -p 'process.cwd();'\"";
 
 usageInfo = """
 -h, --help         output usage information
@@ -59,7 +61,8 @@ testOutput = (cmd, expectedOutput) ->
       output = output.concat(lines)
     ps.stdout.on "end", () ->
       for line,i in expectedOutput
-        line.should.equal output[i]
+        should.exist output[i]
+        output[i].should.equal line
       resolve()
 
 describe "parallelshell", ->
@@ -117,3 +120,8 @@ describe "parallelshell", ->
       ps.signalCode.should.equal "SIGINT"
       done()
     killPs(ps)
+
+  it "should allow setting the cwd via the command", (done) ->
+    testOutput(cwdProcess, [path.join(process.cwd(), "test")])
+    .then -> done()
+    .catch done
