@@ -16,10 +16,12 @@ else
 # children
 waitingProcess = "\"node -e 'setTimeout(function(){},10000);'\""
 failingProcess = "\"node -e 'throw new Error();'\""
+inputProcess = "\"node\""
 
 usageInfo = """
 -h, --help         output usage information
 -v, --verbose      verbose logging
+-i, --input        link stdin to last command
 -w, --wait         will not close sibling processes on error
 """.split("\n")
 
@@ -87,9 +89,20 @@ describe "parallelshell", ->
       killPs(ps)
     ),50
 
+  it "should run with a normal child (stdin)", (done) ->
+    ps = spawnParallelshell(inputProcess)
+    spyOnPs ps, 1
+    ps.on "close", () ->
+      ps.signalCode.should.equal "SIGINT"
+      done()
+
+    setTimeout (() ->
+      should.not.exist(ps.signalCode)
+      killPs(ps)
+    ),50
 
   it "should close sibling processes on child error", (done) ->
-    ps = spawnParallelshell([waitingProcess,failingProcess,waitingProcess].join(" "))
+    ps = spawnParallelshell([waitingProcess,failingProcess,inputProcess].join(" "))
     spyOnPs ps,2
     ps.on "close", () ->
       ps.exitCode.should.equal 1
@@ -110,8 +123,9 @@ describe "parallelshell", ->
       new Promise (resolve) -> ps2.on("close",resolve)]
     .then -> done()
     .catch done
+
   it "should close on CTRL+C / SIGINT", (done) ->
-    ps = spawnParallelshell(["-w",waitingProcess,failingProcess,waitingProcess].join(" "))
+    ps = spawnParallelshell(["-w",waitingProcess,failingProcess,inputProcess].join(" "))
     spyOnPs ps,2
     ps.on "close", () ->
       ps.signalCode.should.equal "SIGINT"
