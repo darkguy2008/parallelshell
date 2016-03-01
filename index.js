@@ -2,11 +2,25 @@
 
 'use strict';
 var spawn = require('child_process').spawn;
+var fixArgsOnWindows = require('node_issue_25339_workaround');
 
-var sh, shFlag, children, args, wait, cmds, verbose, i ,len;
+var sh, shFlag, children, originalArgs, args, hasFixedArgs, wait, cmds, verbose, i, len;
 // parsing argv
 cmds = [];
-args = process.argv.slice(2);
+args = originalArgs = process.argv.slice(2);
+
+// cross platform compatibility
+if (process.platform === 'win32') {
+    sh = 'cmd';
+    shFlag = '/c';
+    
+    args = fixArgsOnWindows(originalArgs);
+    hasFixedArgs = true;
+} else {
+    sh = 'sh';
+    shFlag = '-c';
+}
+
 for (i = 0, len = args.length; i < len; i++) {
     if (args[i][0] === '-') {
         switch (args[i]) {
@@ -29,6 +43,15 @@ for (i = 0, len = args.length; i < len; i++) {
     } else {
         cmds.push(args[i]);
     }
+}
+
+if (verbose && hasFixedArgs) {
+    console.log('### Original arguments ###');
+    console.log(originalArgs.join('\n'));
+    console.log('\n');
+    console.log('### Fixed arguments ###');
+    console.log(args.join('\n'));
+    console.log('\n');
 }
 
 // called on close of a child process
@@ -84,15 +107,6 @@ function close (code) {
     }
     if (opened == closed) {process.exit(code);}
 
-}
-
-// cross platform compatibility
-if (process.platform === 'win32') {
-    sh = 'cmd';
-    shFlag = '/c';
-} else {
-    sh = 'sh';
-    shFlag = '-c';
 }
 
 // start the children

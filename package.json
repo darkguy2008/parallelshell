@@ -28,5 +28,8 @@
     "chai": "^2.3.0",
     "coffee-script": "^1.9.2",
     "mocha": "^2.2.4"
+  },
+  "dependencies": {
+    "node_issue_25339_workaround": "0.0.1"
   }
 }
