@@ -42,6 +42,11 @@ function childClose (code) {
             console.log('`' + this.cmd + '` ended successfully');
         }
     }
+    if (code > 0) {
+        process.on('exit', function() {
+            process.exit(code);
+        });
+    }
     if (code > 0 && !wait) close(code);
     status();
 }
