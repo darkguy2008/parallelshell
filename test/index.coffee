@@ -32,7 +32,7 @@ cmdWrapper = (cmd) ->
 
 spawnParallelshell = (cmd) ->
   return spawn sh, [shArg, cmdWrapper("node ./index.js "+cmd )], {
-    cwd: process.cwd
+    cwd: process.cwd()
   }
 
 killPs = (ps) ->
@@ -67,6 +67,7 @@ describe "parallelshell", ->
     Promise.all([testOutput("-h", usageInfo), testOutput("--help", usageInfo)])
     .then -> done()
     .catch done
+    return
 
   it "should close with exitCode 1 on child error", (done) ->
     ps = spawnParallelshell(failingProcess)
@@ -85,7 +86,7 @@ describe "parallelshell", ->
     setTimeout (() ->
       should.not.exist(ps.signalCode)
       killPs(ps)
-    ),50
+    ),25
 
 
   it "should close sibling processes on child error", (done) ->
@@ -105,11 +106,13 @@ describe "parallelshell", ->
       should.not.exist(ps2.signalCode)
       killPs(ps)
       killPs(ps2)
-    ),50
+    ),25
     Promise.all [new Promise((resolve) -> ps.on("close",resolve)),
       new Promise (resolve) -> ps2.on("close",resolve)]
     .then -> done()
     .catch done
+    return
+
   it "should close on CTRL+C / SIGINT", (done) ->
     ps = spawnParallelshell(["-w",waitingProcess,failingProcess,waitingProcess].join(" "))
     spyOnPs ps,2

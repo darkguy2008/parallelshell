@@ -24,9 +24,9 @@
   "author": "Keith Cirkel <npm@keithcirkel.co.uk> (http://keithcirkel.co.uk/)",
   "license": "MIT",
   "devDependencies": {
-    "bluebird": "^2.9.25",
-    "chai": "^2.3.0",
-    "coffee-script": "^1.9.2",
-    "mocha": "^2.2.4"
+    "bluebird": "^3.5.0",
+    "chai": "^4.0.2",
+    "coffee-script": "^1.12.6",
+    "mocha": "^3.4.2"
   }
 }
