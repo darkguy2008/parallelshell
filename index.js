@@ -98,11 +98,20 @@ if (process.platform === 'win32') {
 // start the children
 children = [];
 cmds.forEach(function (cmd) {
+    var cwd = undefined;
+    try {
+        var cmd_tmp = JSON.parse(cmd);
+	if (cmd_tmp.length === 2) {
+        	cwd = cmd_tmp[0];
+        	cmd = cmd_tmp[1];
+	}
+    } catch(SyntaxError) {}; // Squash this error
+
     if (process.platform != 'win32') {
       cmd = "exec "+cmd;
     }
     var child = spawn(sh,[shFlag,cmd], {
-        cwd: process.cwd,
+        cwd: (cwd === undefined) ? process.cwd : cwd,
         env: process.env,
         stdio: ['pipe', process.stdout, process.stderr]
     })
