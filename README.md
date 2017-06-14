@@ -4,7 +4,12 @@ This is a super simple npm module to run shell commands in parallel. All
 processes will share the same stdout/stderr, and if any command exits with a
 non-zero exit status, the rest are stopped and the exit code carries through.
 
-### currently not maintained, see [Consolidation of multiple similar libraries](https://github.com/mysticatea/npm-run-all/issues/10)
+### Version compatibility notes
+
+* v2.0.0 is compatible with Node < 8
+* v3.x.x is compatible with Node >= 8
+
+### Maintenance has been resumed by [DARKGuy](https://github.com/darkguy2008). However, there are also better options, see [Consolidation of multiple similar libraries](https://github.com/mysticatea/npm-run-all/issues/10).
 
 ### Motivation
 
