@@ -9,7 +9,7 @@ non-zero exit status, the rest are stopped and the exit code carries through.
 * v2.0.0 is compatible with Node < 8
 * v3.x.x is compatible with Node >= 8
 
-### Maintenance has been resumed by [DARKGuy](https://github.com/darkguy2008). However, there are also better options, see [Consolidation of multiple similar libraries](https://github.com/mysticatea/npm-run-all/issues/10).
+### Maintenance has been resumed by [@darkguy2008](https://github.com/darkguy2008). However, there are also better options, see [Consolidation of multiple similar libraries](https://github.com/mysticatea/npm-run-all/issues/10).
 
 ### Motivation
 
