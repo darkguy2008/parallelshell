@@ -102,7 +102,7 @@ cmds.forEach(function (cmd) {
       cmd = "exec "+cmd;
     }
     var child = spawn(sh,[shFlag,cmd], {
-        cwd: process.cwd,
+        cwd: process.cwd(),
         env: process.env,
         stdio: ['pipe', process.stdout, process.stderr]
     })
