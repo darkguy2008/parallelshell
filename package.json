@@ -1,14 +1,14 @@
 {
   "name": "parallelshell",
-  "version": "3.0.1",
+  "version": "3.0.2",
   "description": "Invoke multiple commands, running in parallel",
-  "homepage": "https://github.com/keithamus/parallelshell",
+  "homepage": "https://github.com/darkguy2008/parallelshell",
   "repository": {
     "type": "git",
-    "url": "git@github.com:keithamus/parallelshell.git"
+    "url": "git@github.com:darkguy2008/parallelshell.git"
   },
   "bugs": {
-    "url": "https://github.com/keithamus/parallelshell/issues"
+    "url": "https://github.com/darkguy2008/parallelshell/issues"
   },
   "main": "index.js",
   "bin": {
@@ -21,7 +21,7 @@
     "parallel",
     "shell"
   ],
-  "author": "Keith Cirkel <npm@keithcirkel.co.uk> (http://keithcirkel.co.uk/)",
+  "author": "DARKGuy <darkguy2008@gmail.com>",
   "license": "MIT",
   "devDependencies": {
     "bluebird": "^3.5.0",

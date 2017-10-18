@@ -6,8 +6,7 @@ non-zero exit status, the rest are stopped and the exit code carries through.
 
 ### Version compatibility notes
 
-* v2.0.0 is compatible with Node < 8
-* v3.x.x is compatible with Node >= 8
+* Fully compatible with Node up to v8 and later!
 
 ### Maintenance has been resumed by [@darkguy2008](https://github.com/darkguy2008). However, there are also better options, see [Consolidation of multiple similar libraries](https://github.com/mysticatea/npm-run-all/issues/10).
 

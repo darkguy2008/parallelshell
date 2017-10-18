@@ -1,3 +1,8 @@
+### v3.0.2
+ - [#60](https://github.com/keithamus/parallelshell/pulls/60) < Node 8 fix
+ - [#33](https://github.com/keithamus/parallelshell/issues/33) Readme fix
+ ([@darkguy2008](https://github.com/darkguy2008))
+ 
 ### v3.0.1
  - [#58](https://github.com/keithamus/parallelshell/issues/58) Fix CRLF
  problem not allowing parallelshell to start up (shame on me!).
