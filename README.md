@@ -29,6 +29,11 @@ non-zero exit status, the rest are stopped and the exit code carries through.
 
 * `parallelshell` outputs all jobs stdout/err to its stdout/err. background jobs do that... kind of coincidentally (read: unreliably)
 
+**So what's the difference between GNU parallel and this?**
+
+The biggest difference is that parallelshell is an npm module and GNU parallel isn't. While they probably do similar things, albeit (GNU) parallel being more advanced, parallelshell is an easier option to work with when using npm (because it's an npm module).
+
+If you have GNU parallel installed on all the machines you project will be on, then by all means use it! :)
 
 ### Install
 
