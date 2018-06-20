@@ -102,7 +102,7 @@ cmds.forEach(function (cmd) {
       cmd = "exec "+cmd;
     }
     var child = spawn(sh,[shFlag,cmd], {
-        cwd: process.versions.node < '8.0.0' ? process.cwd : process.cwd(),
+        cwd: parseInt(process.versions.node) < 8 ? process.cwd : process.cwd(),
         env: process.env,
         stdio: ['pipe', process.stdout, process.stderr]
     })
