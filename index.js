@@ -69,7 +69,7 @@ function close (code) {
     var i, len, closed = 0, opened = 0;
 
     for (i = 0, len = children.length; i < len; i++) {
-        if (!children[i].exitCode) {
+        if (!children[i].exitCode && children[i].exitCode !== 0) {
             opened++;
             children[i].removeAllListeners('close');
             children[i].kill("SIGINT");
