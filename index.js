@@ -102,7 +102,7 @@ cmds.forEach(function (cmd) {
       cmd = "exec "+cmd;
     }
     var child = spawn(sh,[shFlag,cmd], {
-        cwd: parseInt(process.versions.node) < 8 ? process.cwd : process.cwd(),
+        cwd: checkNodeVersion('8.0.0', process.versions.node) ? process.cwd() : process.cwd,
         env: process.env,
         stdio: ['pipe', process.stdout, process.stderr]
     })
@@ -113,3 +113,29 @@ cmds.forEach(function (cmd) {
 
 // close all children on ctrl+c
 process.on('SIGINT', close)
+
+/* Return true if version >= minimumRequired
+ * @string minimumRequired  example : 8.0.0
+ * @string version          example : 10.0.0 
+ */
+function checkNodeVersion (minimumRequired, version) {
+    var minVer = minimumRequired.split('.')
+    var ver = version.split('.')
+    var result = false;
+
+    for (var i in minVer) {
+        var min = parseInt(minVer[i])
+        if (!ver[i]) { break ; }
+        var vers = parseInt(ver[i])
+        if (vers > min) {
+            return true
+        }
+        else if (vers == min) {
+            result = true
+        }
+        else {
+            return false
+        }
+    }
+    return result
+}
