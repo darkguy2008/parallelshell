@@ -16,6 +16,7 @@ else
 # children
 waitingProcess = "\"node -e 'setTimeout(function(){},10000);'\""
 failingProcess = "\"node -e 'throw new Error();'\""
+shortProcess = "\"echo 1\""
 
 usageInfo = """
 -h, --help         output usage information
@@ -91,6 +92,20 @@ describe "parallelshell", ->
 
   it "should close sibling processes on child error", (done) ->
     ps = spawnParallelshell([waitingProcess,failingProcess,waitingProcess].join(" "))
+    spyOnPs ps,2
+    ps.on "close", () ->
+      ps.exitCode.should.equal 1
+      done()
+
+  it "should close sibling processes on child error and exit with error (#1)", (done) ->
+    ps = spawnParallelshell([shortProcess,failingProcess].join(" "))
+    spyOnPs ps,2
+    ps.on "close", () ->
+      ps.exitCode.should.equal 1
+      done()
+
+  it "should close sibling processes on child error and exit with error (#2)", (done) ->
+    ps = spawnParallelshell([failingProcess,waitingProcess].join(" "))
     spyOnPs ps,2
     ps.on "close", () ->
       ps.exitCode.should.equal 1
