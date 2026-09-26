@@ -2,12 +2,19 @@ chai = require "chai"
 chai.should()
 spawn = require("child_process").spawn
 Promise = require("bluebird")
+path = require("path")
 
 waitingProcess = "node test/fixtures/waiting.js"
 failingProcess = "node test/fixtures/failing.js"
 READY_PREFIX = "ready "
 DONE_LINE = "done"
 ERRORED_SUFFIX = " errored"
+PARALLELSHELL_PATH = path.join __dirname, "..", "index.js"
+FIXTURES_DIR = path.join __dirname, "fixtures"
+ENV_NAME = "PARALLELSHELL_TEST_ENV"
+ENV_VALUE = "passed-through"
+printCwdProcess = "node -p 'process.cwd()'"
+printEnvProcess = "node -p process.env.#{ENV_NAME}"
 
 usageInfo = """
 -h, --help         output usage information
@@ -18,8 +25,8 @@ usageInfo = """
 spawned = []
 childPids = []
 
-spawnParallelshell = (args...) ->
-  ps = spawn process.execPath, ["index.js"].concat(args)
+spawnParallelshellWith = (options, args...) ->
+  ps = spawn process.execPath, [PARALLELSHELL_PATH].concat(args), options
   ps.output = ""
   ps.errorOutput = ""
   ps.stdout.setEncoding "utf8"
@@ -30,6 +37,8 @@ spawnParallelshell = (args...) ->
     ps.on "close", (code, signal) -> resolve {code, signal}
   spawned.push ps
   ps
+
+spawnParallelshell = (args...) -> spawnParallelshellWith {}, args...
 
 outputLines = (ps) -> ps.output.split("\n")
 
@@ -85,3 +94,17 @@ describe "parallelshell", ->
         ps.exited
       .then ->
         doneCount(ps).should.equal 2
+
+  it "should run children in its working directory", ->
+    ps = spawnParallelshellWith {cwd: FIXTURES_DIR}, printCwdProcess
+    ps.exited.then (result) ->
+      result.code.should.equal 0
+      outputLines(ps)[0].should.equal FIXTURES_DIR
+
+  it "should pass its environment to children", ->
+    env = Object.assign {}, process.env
+    env[ENV_NAME] = ENV_VALUE
+    ps = spawnParallelshellWith {env}, printEnvProcess
+    ps.exited.then (result) ->
+      result.code.should.equal 0
+      outputLines(ps)[0].should.equal ENV_VALUE
