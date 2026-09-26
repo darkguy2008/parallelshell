@@ -2,6 +2,8 @@
 
 'use strict';
 var spawn = require('child_process').spawn;
+var signals = require('constants');
+var SIGNAL_EXIT_CODE_BASE = 128;
 
 var sh, shFlag, children, args, wait, cmds, verbose, i ,len;
 // parsing argv
@@ -32,9 +34,9 @@ for (i = 0, len = args.length; i < len; i++) {
 }
 
 // called on close of a child process
-function childClose (code) {
+function childClose (code, signal) {
     var i, len;
-    code = code ? (code.code || code) : code;
+    code = signal ? SIGNAL_EXIT_CODE_BASE + signals[signal] : code;
     if (verbose) {
         if (code > 0) {
             console.error('`' + this.cmd + '` failed with exit code ' + code);
@@ -42,7 +44,10 @@ function childClose (code) {
             console.log('`' + this.cmd + '` ended successfully');
         }
     }
-    if (code > 0 && !wait) close(code);
+    if (code > 0) {
+        process.exitCode = process.exitCode || code;
+        if (!wait) close(process.exitCode);
+    }
     status();
 }
 
@@ -52,9 +57,9 @@ function status () {
         console.log('\n');
         console.log('### Status ###');
         for (i = 0, len = children.length; i < len; i++) {
-            if (children[i].exitCode === null) {
+            if (children[i].exitCode === null && children[i].signalCode === null) {
                 console.log('`' + children[i].cmd + '` is still running');
-            } else if (children[i].exitCode > 0) {
+            } else if (children[i].exitCode !== 0) {
                 console.log('`' + children[i].cmd + '` errored');
             } else {
                 console.log('`' + children[i].cmd + '` finished');
@@ -69,7 +74,7 @@ function close (code) {
     var i, len, closed = 0, opened = 0;
 
     for (i = 0, len = children.length; i < len; i++) {
-        if (!children[i].exitCode) {
+        if (children[i].exitCode === null && children[i].signalCode === null) {
             opened++;
             children[i].removeAllListeners('close');
             children[i].kill("SIGINT");

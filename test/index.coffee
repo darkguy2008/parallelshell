@@ -1,4 +1,5 @@
 chai = require "chai"
+signals = require "constants"
 chai.should()
 spawn = require("child_process").spawn
 Promise = require("bluebird")
@@ -6,8 +7,14 @@ path = require("path")
 
 waitingProcess = "node test/fixtures/waiting.js"
 failingProcess = "node test/fixtures/failing.js"
+succeedingProcess = "true"
+FAILURE_EXIT_CODE = 3
+LATER_FAILURE_EXIT_CODE = 5
+SIGNAL_EXIT_CODE_BASE = 128
 READY_PREFIX = "ready "
 DONE_LINE = "done"
+SUCCESS_SUFFIX = " ended successfully"
+CLOSING_SUFFIX = " will now be closed"
 ERRORED_SUFFIX = " errored"
 PARALLELSHELL_PATH = path.join __dirname, "..", "index.js"
 FIXTURES_DIR = path.join __dirname, "fixtures"
@@ -61,6 +68,9 @@ waitForReady = (ps, count) ->
     childPids.push pids...
     pids
 
+hasLineEndingWith = (suffix) -> (ps) ->
+  outputLines(ps).some (line) -> line.endsWith suffix
+
 doneCount = (ps) ->
   outputLines(ps).filter((line) -> line == DONE_LINE).length
 
@@ -87,8 +97,7 @@ describe "parallelshell", ->
   ["-w", "--wait"].forEach (flag) ->
     it "should wait for sibling processes on child error when called with #{flag}", ->
       ps = spawnParallelshell flag, "-v", waitingProcess, failingProcess, waitingProcess
-      failureHandled = -> outputLines(ps).some (line) -> line.endsWith ERRORED_SUFFIX
-      Promise.all [waitForReady(ps, 2), waitForOutput(ps, failureHandled)]
+      Promise.all [waitForReady(ps, 2), waitForOutput(ps, hasLineEndingWith ERRORED_SUFFIX)]
       .then ([pids]) ->
         process.kill pid, "SIGUSR2" for pid in pids
         ps.exited
@@ -108,3 +117,31 @@ describe "parallelshell", ->
     ps.exited.then (result) ->
       result.code.should.equal 0
       outputLines(ps)[0].should.equal ENV_VALUE
+
+  it "should exit with a failing child's code after a sibling already succeeded", ->
+    ps = spawnParallelshell "-v", succeedingProcess, "#{waitingProcess} #{FAILURE_EXIT_CODE}"
+    Promise.all [waitForReady(ps, 1), waitForOutput(ps, hasLineEndingWith SUCCESS_SUFFIX)]
+    .then ([[pid]]) ->
+      process.kill pid, "SIGUSR2"
+      ps.exited
+    .then (result) ->
+      result.code.should.equal FAILURE_EXIT_CODE
+      hasLineEndingWith(CLOSING_SUFFIX)(ps).should.be.false
+
+  it "should exit with the first failing child's code after waiting when called with -w", ->
+    ps = spawnParallelshell "-w", "-v", failingProcess, "#{waitingProcess} #{LATER_FAILURE_EXIT_CODE}"
+    Promise.all [waitForReady(ps, 1), waitForOutput(ps, hasLineEndingWith ERRORED_SUFFIX)]
+    .then ([[pid]]) ->
+      process.kill pid, "SIGUSR2"
+      ps.exited
+    .then (result) ->
+      doneCount(ps).should.equal 1
+      result.code.should.equal 1
+
+  it "should close sibling processes and exit with 128 + signal number when a child is killed by a signal", ->
+    ps = spawnParallelshell "-v", waitingProcess, waitingProcess
+    waitForReady(ps, 2).then ([pid]) ->
+      process.kill pid, "SIGKILL"
+      Promise.all [ps.exited, waitForOutput(ps, hasLineEndingWith ERRORED_SUFFIX)]
+    .then ([result]) ->
+      result.code.should.equal SIGNAL_EXIT_CODE_BASE + signals.SIGKILL
