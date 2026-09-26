@@ -31,9 +31,7 @@ cmdWrapper = (cmd) ->
   return cmd
 
 spawnParallelshell = (cmd) ->
-  return spawn sh, [shArg, cmdWrapper("node ./index.js "+cmd )], {
-    cwd: process.cwd
-  }
+  return spawn sh, [shArg, cmdWrapper("node ./index.js "+cmd )]
 
 killPs = (ps) ->
   ps.kill "SIGINT"
