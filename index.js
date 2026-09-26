@@ -103,6 +103,8 @@ if (process.platform === 'win32') {
     shFlag = '-c';
 }
 
+process.once('SIGINT', function () { close(null, 'SIGINT'); });
+
 // start the children
 children = [];
 cmds.forEach(function (cmd) {
@@ -116,6 +118,3 @@ cmds.forEach(function (cmd) {
     child.cmd = cmd
     children.push(child)
 });
-
-// close all children on ctrl+c
-process.once('SIGINT', function () { close(null, 'SIGINT'); })
