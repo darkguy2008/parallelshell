@@ -4,6 +4,7 @@
 var spawn = require('child_process').spawn;
 var signals = require('constants');
 var SIGNAL_EXIT_CODE_BASE = 128;
+var FORWARDED_SIGNALS = ['SIGINT'];
 
 var sh, shFlag, children, args, wait, cmds, verbose, i ,len;
 // parsing argv
@@ -46,9 +47,15 @@ function childClose (code, signal) {
     }
     if (code > 0) {
         process.exitCode = process.exitCode || code;
-        if (!wait) close(process.exitCode);
+        if (!wait) close(process.exitCode, interruption(code));
     }
     status();
+}
+
+function interruption (code) {
+    return FORWARDED_SIGNALS.filter(function (signal) {
+        return code === SIGNAL_EXIT_CODE_BASE + signals[signal];
+    })[0];
 }
 
 function status () {
@@ -70,25 +77,34 @@ function status () {
 }
 
 // closes all children and the process
-function close (code) {
+function close (code, signal) {
     var i, len, closed = 0, opened = 0;
 
     for (i = 0, len = children.length; i < len; i++) {
         if (children[i].exitCode === null && children[i].signalCode === null) {
             opened++;
             children[i].removeAllListeners('close');
-            children[i].kill("SIGINT");
+            children[i].kill(signal || "SIGINT");
             if (verbose) console.log('`' + children[i].cmd + '` will now be closed');
             children[i].on('close', function() {
                 closed++;
                 if (opened == closed) {
-                    process.exit(code);
+                    exit(code, signal);
                 }
             });
         }
     }
-    if (opened == closed) {process.exit(code);}
+    if (opened == closed) {exit(code, signal);}
 
+}
+
+function exit (code, signal) {
+    if (signal) {
+        process.removeAllListeners(signal);
+        process.kill(process.pid, signal);
+    } else {
+        process.exit(code);
+    }
 }
 
 // cross platform compatibility
@@ -99,6 +115,10 @@ if (process.platform === 'win32') {
     sh = 'sh';
     shFlag = '-c';
 }
+
+FORWARDED_SIGNALS.forEach(function (signal) {
+    process.once(signal, function () { close(null, signal); });
+});
 
 // start the children
 children = [];
@@ -113,6 +133,3 @@ cmds.forEach(function (cmd) {
     child.cmd = cmd
     children.push(child)
 });
-
-// close all children on ctrl+c
-process.on('SIGINT', close)

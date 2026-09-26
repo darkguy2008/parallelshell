@@ -1,6 +1,6 @@
 chai = require "chai"
 signals = require "constants"
-chai.should()
+should = chai.should()
 spawn = require("child_process").spawn
 Promise = require("bluebird")
 path = require("path")
@@ -71,6 +71,13 @@ waitForReady = (ps, count) ->
 hasLineEndingWith = (suffix) -> (ps) ->
   outputLines(ps).some (line) -> line.endsWith suffix
 
+isAlive = (pid) ->
+  try
+    process.kill pid, 0
+    true
+  catch error
+    error.code != "ESRCH"
+
 doneCount = (ps) ->
   outputLines(ps).filter((line) -> line == DONE_LINE).length
 
@@ -90,6 +97,15 @@ describe "parallelshell", ->
     spawnParallelshell(failingProcess).exited.then (result) ->
       result.code.should.equal 1
 
+  it "should run with a normal child", ->
+    ps = spawnParallelshell waitingProcess
+    waitForReady(ps, 1).then ->
+      should.not.exist ps.exitCode
+      ps.kill "SIGINT"
+      ps.exited
+    .then (result) ->
+      result.signal.should.equal "SIGINT"
+
   it "should close sibling processes on child error", ->
     spawnParallelshell(waitingProcess, failingProcess, waitingProcess).exited.then (result) ->
       result.code.should.equal 1
@@ -103,6 +119,14 @@ describe "parallelshell", ->
         ps.exited
       .then ->
         doneCount(ps).should.equal 2
+
+  it "should close on CTRL+C / SIGINT", ->
+    ps = spawnParallelshell "-w", waitingProcess, failingProcess, waitingProcess
+    waitForReady(ps, 2).then ->
+      ps.kill "SIGINT"
+      ps.exited
+    .then (result) ->
+      result.signal.should.equal "SIGINT"
 
   it "should run children in its working directory", ->
     ps = spawnParallelshellWith {cwd: FIXTURES_DIR}, printCwdProcess
@@ -145,3 +169,48 @@ describe "parallelshell", ->
       Promise.all [ps.exited, waitForOutput(ps, hasLineEndingWith ERRORED_SUFFIX)]
     .then ([result]) ->
       result.code.should.equal SIGNAL_EXIT_CODE_BASE + signals.SIGKILL
+
+  it "should stop its children with SIGINT and die by SIGINT without crashing", ->
+    ps = spawnParallelshell waitingProcess, waitingProcess
+    waitForReady(ps, 2).then (pids) ->
+      ps.kill "SIGINT"
+      ps.exited.then (result) ->
+        ps.errorOutput.should.equal ""
+        result.should.deep.equal {code: null, signal: "SIGINT"}
+        pids.filter(isAlive).should.be.empty
+
+  it "should die by SIGINT when CTRL+C interrupts its whole process group", ->
+    ps = spawnParallelshellWith {detached: true}, waitingProcess, waitingProcess
+    waitForReady(ps, 2).then ->
+      process.kill -ps.pid, "SIGINT"
+      ps.exited.then (result) ->
+        ps.errorOutput.should.equal ""
+        result.should.deep.equal {code: null, signal: "SIGINT"}
+
+  it "should stop its siblings and die by SIGINT when a child is interrupted", ->
+    ps = spawnParallelshell waitingProcess, waitingProcess
+    waitForReady(ps, 2).then ([interruptedPid, siblingPid]) ->
+      process.kill interruptedPid, "SIGINT"
+      ps.exited.then (result) ->
+        result.should.deep.equal {code: null, signal: "SIGINT"}
+        isAlive(siblingPid).should.be.false
+
+  it "should stop its siblings and die by SIGINT when a child exits with the interrupted status", ->
+    interruptedProcess = "#{waitingProcess} #{SIGNAL_EXIT_CODE_BASE + signals.SIGINT}"
+    ps = spawnParallelshell interruptedProcess, interruptedProcess
+    waitForReady(ps, 2).then ([interruptedPid, siblingPid]) ->
+      process.kill interruptedPid, "SIGUSR2"
+      ps.exited.then (result) ->
+        result.should.deep.equal {code: null, signal: "SIGINT"}
+        isAlive(siblingPid).should.be.false
+
+  it "should keep siblings running and exit with the interrupted status when a child is interrupted with -w", ->
+    ps = spawnParallelshell "-w", "-v", waitingProcess, waitingProcess
+    waitForReady(ps, 2).then ([interruptedPid, siblingPid]) ->
+      process.kill interruptedPid, "SIGINT"
+      waitForOutput(ps, hasLineEndingWith ERRORED_SUFFIX).then ->
+        process.kill siblingPid, "SIGUSR2"
+        ps.exited
+    .then (result) ->
+      doneCount(ps).should.equal 1
+      result.code.should.equal SIGNAL_EXIT_CODE_BASE + signals.SIGINT
