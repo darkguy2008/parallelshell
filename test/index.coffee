@@ -23,9 +23,7 @@ usageInfo = """
 """.split("\n")
 
 spawnParallelshell = (cmd) ->
-	return spawn sh, [shFlag, "node './index.js' " + cmd], {
-      cwd: process.cwd
-    }
+	return spawn sh, [shFlag, "node './index.js' " + cmd]
 
 testOutput = (cmd, expectedOutput) ->
   return new Promise (resolve) ->

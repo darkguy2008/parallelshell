@@ -90,8 +90,6 @@ if (process.platform === 'win32') {
 children = [];
 cmds.forEach(function (cmd) {
     var child = spawn(sh,[shFlag,cmd], {
-        cwd: process.cwd,
-        env: process.env,
         stdio: ['pipe', process.stdout, process.stderr]
     })
     .on('close', childClose);
