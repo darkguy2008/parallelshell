@@ -11,6 +11,7 @@ succeedingProcess = "true"
 FAILURE_EXIT_CODE = 3
 LATER_FAILURE_EXIT_CODE = 5
 SIGNAL_EXIT_CODE_BASE = 128
+FORWARDED_SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP"]
 READY_PREFIX = "ready "
 DONE_LINE = "done"
 SUCCESS_SUFFIX = " ended successfully"
@@ -170,14 +171,15 @@ describe "parallelshell", ->
     .then ([result]) ->
       result.code.should.equal SIGNAL_EXIT_CODE_BASE + signals.SIGKILL
 
-  it "should stop its children with SIGINT and die by SIGINT without crashing", ->
-    ps = spawnParallelshell waitingProcess, waitingProcess
-    waitForReady(ps, 2).then (pids) ->
-      ps.kill "SIGINT"
-      ps.exited.then (result) ->
-        ps.errorOutput.should.equal ""
-        result.should.deep.equal {code: null, signal: "SIGINT"}
-        pids.filter(isAlive).should.be.empty
+  FORWARDED_SIGNALS.forEach (signal) ->
+    it "should stop its children with #{signal} and die by #{signal} without crashing", ->
+      ps = spawnParallelshell waitingProcess, waitingProcess
+      waitForReady(ps, 2).then (pids) ->
+        ps.kill signal
+        ps.exited.then (result) ->
+          ps.errorOutput.should.equal ""
+          result.should.deep.equal {code: null, signal}
+          pids.filter(isAlive).should.be.empty
 
   it "should die by SIGINT when CTRL+C interrupts its whole process group", ->
     ps = spawnParallelshellWith {detached: true}, waitingProcess, waitingProcess
@@ -187,13 +189,14 @@ describe "parallelshell", ->
         ps.errorOutput.should.equal ""
         result.should.deep.equal {code: null, signal: "SIGINT"}
 
-  it "should stop its siblings and die by SIGINT when a child is interrupted", ->
-    ps = spawnParallelshell waitingProcess, waitingProcess
-    waitForReady(ps, 2).then ([interruptedPid, siblingPid]) ->
-      process.kill interruptedPid, "SIGINT"
-      ps.exited.then (result) ->
-        result.should.deep.equal {code: null, signal: "SIGINT"}
-        isAlive(siblingPid).should.be.false
+  FORWARDED_SIGNALS.forEach (signal) ->
+    it "should stop its siblings and die by #{signal} when a child is stopped by #{signal}", ->
+      ps = spawnParallelshell waitingProcess, waitingProcess
+      waitForReady(ps, 2).then ([interruptedPid, siblingPid]) ->
+        process.kill interruptedPid, signal
+        ps.exited.then (result) ->
+          result.should.deep.equal {code: null, signal}
+          isAlive(siblingPid).should.be.false
 
   it "should stop its siblings and die by SIGINT when a child exits with the interrupted status", ->
     interruptedProcess = "#{waitingProcess} #{SIGNAL_EXIT_CODE_BASE + signals.SIGINT}"

@@ -4,7 +4,7 @@
 var spawn = require('child_process').spawn;
 var signals = require('constants');
 var SIGNAL_EXIT_CODE_BASE = 128;
-var FORWARDED_SIGNALS = ['SIGINT'];
+var FORWARDED_SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'];
 
 var sh, shFlag, children, args, wait, cmds, verbose, i ,len;
 // parsing argv
