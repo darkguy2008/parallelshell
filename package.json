@@ -15,7 +15,8 @@
     "parallelshell": "./index.js"
   },
   "scripts": {
-    "test": "mocha"
+    "test": "mocha",
+    "test:docker": "node test/docker/matrix.js"
   },
   "keywords": [
     "parallel",

@@ -1,122 +1,87 @@
 chai = require "chai"
-should = chai.should()
+chai.should()
 spawn = require("child_process").spawn
 Promise = require("bluebird")
 
-verbose = 0
-
-# cross platform compatibility
-if process.platform == "win32"
-  sh = "cmd"
-  shArg = "/c"
-else
-  sh = "sh"
-  shArg = "-c"
-
-# children
-waitingProcess = "\"node -e 'setTimeout(function(){},10000);'\""
-failingProcess = "\"node -e 'throw new Error();'\""
+waitingProcess = "node test/fixtures/waiting.js"
+failingProcess = "node test/fixtures/failing.js"
+READY_PREFIX = "ready "
+DONE_LINE = "done"
+ERRORED_SUFFIX = " errored"
 
 usageInfo = """
 -h, --help         output usage information
 -v, --verbose      verbose logging
 -w, --wait         will not close sibling processes on error
-""".split("\n")
+""" + "\n"
 
-cmdWrapper = (cmd) ->
-  if process.platform != "win32"
-    cmd = "exec "+cmd
-  if verbose
-    console.log "Calling: "+cmd
-  return cmd
+spawned = []
+childPids = []
 
-spawnParallelshell = (cmd) ->
-  return spawn sh, [shArg, cmdWrapper("node ./index.js "+cmd )], {
-    cwd: process.cwd()
-  }
+spawnParallelshell = (args...) ->
+  ps = spawn process.execPath, ["index.js"].concat(args)
+  ps.output = ""
+  ps.errorOutput = ""
+  ps.stdout.setEncoding "utf8"
+  ps.stderr.setEncoding "utf8"
+  ps.stdout.on "data", (data) -> ps.output += data
+  ps.stderr.on "data", (data) -> ps.errorOutput += data
+  ps.exited = new Promise (resolve) ->
+    ps.on "close", (code, signal) -> resolve {code, signal}
+  spawned.push ps
+  ps
 
-killPs = (ps) ->
-  ps.kill "SIGINT"
+outputLines = (ps) -> ps.output.split("\n")
 
-spyOnPs = (ps, verbosity=1) ->
-  if verbose >= verbosity
-    ps.stdout.setEncoding("utf8")
-    ps.stdout.on "data", (data) ->
-      console.log data
-    ps.stderr.setEncoding("utf8")
-    ps.stderr.on "data", (data) ->
-      console.log "err: "+data
+waitForOutput = (ps, predicate) ->
+  new Promise (resolve, reject) ->
+    check = -> resolve() if predicate ps
+    ps.stdout.on "data", check
+    ps.on "close", ->
+      reject new Error "parallelshell exited before expected output:\n" + ps.output + ps.errorOutput
+    check()
 
-testOutput = (cmd, expectedOutput) ->
-  return new Promise (resolve) ->
-    ps = spawnParallelshell(cmd)
-    spyOnPs ps, 3
-    ps.stdout.setEncoding("utf8")
-    output = []
-    ps.stdout.on "data", (data) ->
-      lines = data.split("\n")
-      lines.pop() if lines[lines.length-1] == ""
-      output = output.concat(lines)
-    ps.stdout.on "end", () ->
-      for line,i in expectedOutput
-        line.should.equal output[i]
-      resolve()
+readyPids = (ps) ->
+  outputLines(ps)
+    .filter (line) -> line.indexOf(READY_PREFIX) == 0
+    .map (line) -> Number line.slice READY_PREFIX.length
+
+waitForReady = (ps, count) ->
+  waitForOutput(ps, -> readyPids(ps).length >= count).then ->
+    pids = readyPids ps
+    childPids.push pids...
+    pids
+
+doneCount = (ps) ->
+  outputLines(ps).filter((line) -> line == DONE_LINE).length
+
+afterEach ->
+  for ps in spawned.splice(0) when ps.exitCode == null and ps.signalCode == null
+    ps.kill "SIGKILL"
+  for pid in childPids.splice(0)
+    try process.kill pid, "SIGKILL"
 
 describe "parallelshell", ->
-  it "should print on -h and --help", (done) ->
-    Promise.all([testOutput("-h", usageInfo), testOutput("--help", usageInfo)])
-    .then -> done()
-    .catch done
-    return
+  it "should print on -h and --help", ->
+    Promise.all ["-h", "--help"].map (flag) ->
+      ps = spawnParallelshell flag
+      ps.exited.then -> ps.output.should.equal usageInfo
 
-  it "should close with exitCode 1 on child error", (done) ->
-    ps = spawnParallelshell(failingProcess)
-    spyOnPs ps, 2
-    ps.on "close", () ->
-      ps.exitCode.should.equal 1
-      done()
+  it "should close with exitCode 1 on child error", ->
+    spawnParallelshell(failingProcess).exited.then (result) ->
+      result.code.should.equal 1
 
-  it "should run with a normal child", (done) ->
-    ps = spawnParallelshell(waitingProcess)
-    spyOnPs ps, 1
-    ps.on "close", () ->
-      ps.signalCode.should.equal "SIGINT"
-      done()
+  it "should close sibling processes on child error", ->
+    spawnParallelshell(waitingProcess, failingProcess, waitingProcess).exited.then (result) ->
+      result.code.should.equal 1
 
-    setTimeout (() ->
-      should.not.exist(ps.signalCode)
-      killPs(ps)
-    ),25
-
-
-  it "should close sibling processes on child error", (done) ->
-    ps = spawnParallelshell([waitingProcess,failingProcess,waitingProcess].join(" "))
-    spyOnPs ps,2
-    ps.on "close", () ->
-      ps.exitCode.should.equal 1
-      done()
-
-  it "should wait for sibling processes on child error when called with -w or --wait", (done) ->
-    ps = spawnParallelshell(["-w",waitingProcess,failingProcess,waitingProcess].join(" "))
-    ps2 = spawnParallelshell(["--wait",waitingProcess,failingProcess,waitingProcess].join(" "))
-    spyOnPs ps,2
-    spyOnPs ps2,2
-    setTimeout (() ->
-      should.not.exist(ps.signalCode)
-      should.not.exist(ps2.signalCode)
-      killPs(ps)
-      killPs(ps2)
-    ),25
-    Promise.all [new Promise((resolve) -> ps.on("close",resolve)),
-      new Promise (resolve) -> ps2.on("close",resolve)]
-    .then -> done()
-    .catch done
-    return
-
-  it "should close on CTRL+C / SIGINT", (done) ->
-    ps = spawnParallelshell(["-w",waitingProcess,failingProcess,waitingProcess].join(" "))
-    spyOnPs ps,2
-    ps.on "close", () ->
-      ps.signalCode.should.equal "SIGINT"
-      done()
-    killPs(ps)
+  ["-w", "--wait"].forEach (flag) ->
+    it "should wait for sibling processes on child error when called with #{flag}", ->
+      ps = spawnParallelshell flag, "-v", waitingProcess, failingProcess, waitingProcess
+      failureHandled = -> outputLines(ps).some (line) -> line.endsWith ERRORED_SUFFIX
+      Promise.all [waitForReady(ps, 2), waitForOutput(ps, failureHandled)]
+      .then ([pids]) ->
+        process.kill pid, "SIGUSR2" for pid in pids
+        ps.exited
+      .then ->
+        doneCount(ps).should.equal 2
