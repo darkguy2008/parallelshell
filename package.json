@@ -1,6 +1,6 @@
 {
   "name": "parallelshell",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Invoke multiple commands, running in parallel",
   "homepage": "https://github.com/keithamus/parallelshell",
   "repository": {

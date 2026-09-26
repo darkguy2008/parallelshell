@@ -1,3 +1,12 @@
+### v2.0.1
+
+ - [#56](https://github.com/darkguy2008/parallelshell/issues/56) Fix "cwd" must
+   be a string crash on Node >= 8.
+ - Fix crash on Ctrl+C with Node >= 20.
+ - Stop all children on Ctrl+C during start-up.
+ - [#55](https://github.com/darkguy2008/parallelshell/issues/55) Exit with the
+   failing child's code when another child already exited 0.
+
 ### v1.1.1
 
  - [#11](https://github.com/keithamus/parallelshell/pull/11) Fix regression
