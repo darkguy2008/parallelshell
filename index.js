@@ -65,7 +65,7 @@ function status () {
 }
 
 // closes all children and the process
-function close (code) {
+function close (code, signal) {
     var i, len;
     for (i = 0, len = children.length; i < len; i++) {
         if (!children[i].exitCode) {
@@ -74,7 +74,11 @@ function close (code) {
             if (verbose) console.log('`' + children[i].cmd + '` will now be closed');
         }
     }
-    process.exit(code);
+    if (signal) {
+        process.kill(process.pid, signal);
+    } else {
+        process.exit(code);
+    }
 }
 
 // cross platform compatibility
@@ -98,4 +102,4 @@ cmds.forEach(function (cmd) {
 });
 
 // close all children on ctrl+c
-process.on('SIGINT', close)
+process.once('SIGINT', function () { close(null, 'SIGINT'); })
