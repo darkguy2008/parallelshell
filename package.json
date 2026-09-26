@@ -25,7 +25,6 @@
   "author": "DARKGuy <darkguy2008@gmail.com>",
   "license": "MIT",
   "devDependencies": {
-    "bluebird": "^3.5.0",
     "chai": "^4.0.2",
     "coffee-script": "^1.12.6",
     "mocha": "^3.4.2"

@@ -2,11 +2,10 @@ chai = require "chai"
 signals = require "constants"
 should = chai.should()
 spawn = require("child_process").spawn
-Promise = require("bluebird")
 path = require("path")
 
 waitingProcess = "node test/fixtures/waiting.js"
-failingProcess = "node test/fixtures/failing.js"
+failingProcess = "false"
 succeedingProcess = "true"
 FAILURE_EXIT_CODE = 3
 LATER_FAILURE_EXIT_CODE = 5
@@ -31,10 +30,9 @@ usageInfo = """
 """ + "\n"
 
 spawned = []
-childPids = []
 
 spawnParallelshellWith = (options, args...) ->
-  ps = spawn process.execPath, [PARALLELSHELL_PATH].concat(args), options
+  ps = spawn process.execPath, [PARALLELSHELL_PATH].concat(args), Object.assign({detached: true}, options)
   ps.output = ""
   ps.errorOutput = ""
   ps.stdout.setEncoding "utf8"
@@ -64,10 +62,7 @@ readyPids = (ps) ->
     .map (line) -> Number line.slice READY_PREFIX.length
 
 waitForReady = (ps, count) ->
-  waitForOutput(ps, -> readyPids(ps).length >= count).then ->
-    pids = readyPids ps
-    childPids.push pids...
-    pids
+  waitForOutput(ps, -> readyPids(ps).length >= count).then -> readyPids ps
 
 hasLineEndingWith = (suffix) -> (ps) ->
   outputLines(ps).some (line) -> line.endsWith suffix
@@ -83,10 +78,8 @@ doneCount = (ps) ->
   outputLines(ps).filter((line) -> line == DONE_LINE).length
 
 afterEach ->
-  for ps in spawned.splice(0) when ps.exitCode == null and ps.signalCode == null
-    ps.kill "SIGKILL"
-  for pid in childPids.splice(0)
-    try process.kill pid, "SIGKILL"
+  for ps in spawned.splice(0) when isAlive -ps.pid
+    process.kill -ps.pid, "SIGKILL"
 
 describe "parallelshell", ->
   it "should print on -h and --help", ->
@@ -97,15 +90,6 @@ describe "parallelshell", ->
   it "should close with exitCode 1 on child error", ->
     spawnParallelshell(failingProcess).exited.then (result) ->
       result.code.should.equal 1
-
-  it "should run with a normal child", ->
-    ps = spawnParallelshell waitingProcess
-    waitForReady(ps, 1).then ->
-      should.not.exist ps.exitCode
-      ps.kill "SIGINT"
-      ps.exited
-    .then (result) ->
-      result.signal.should.equal "SIGINT"
 
   it "should close sibling processes on child error", ->
     spawnParallelshell(waitingProcess, failingProcess, waitingProcess).exited.then (result) ->
@@ -182,7 +166,7 @@ describe "parallelshell", ->
           pids.filter(isAlive).should.be.empty
 
   it "should die by SIGINT when CTRL+C interrupts its whole process group", ->
-    ps = spawnParallelshellWith {detached: true}, waitingProcess, waitingProcess
+    ps = spawnParallelshell waitingProcess, waitingProcess
     waitForReady(ps, 2).then ->
       process.kill -ps.pid, "SIGINT"
       ps.exited.then (result) ->

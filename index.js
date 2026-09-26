@@ -6,8 +6,7 @@ var signals = require('constants');
 var SIGNAL_EXIT_CODE_BASE = 128;
 var FORWARDED_SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'];
 
-var sh, shFlag, children, args, wait, cmds, verbose, i ,len;
-// parsing argv
+var sh, shFlag, commandPrefix, children, args, wait, cmds, verbose, i ,len;
 cmds = [];
 args = process.argv.slice(2);
 for (i = 0, len = args.length; i < len; i++) {
@@ -34,9 +33,7 @@ for (i = 0, len = args.length; i < len; i++) {
     }
 }
 
-// called on close of a child process
 function childClose (code, signal) {
-    var i, len;
     code = signal ? SIGNAL_EXIT_CODE_BASE + signals[signal] : code;
     if (verbose) {
         if (code > 0) {
@@ -47,15 +44,11 @@ function childClose (code, signal) {
     }
     if (code > 0) {
         process.exitCode = process.exitCode || code;
-        if (!wait) close(process.exitCode, interruption(code));
+        if (!wait) close(FORWARDED_SIGNALS.find(function (forwarded) {
+            return code === SIGNAL_EXIT_CODE_BASE + signals[forwarded];
+        }));
     }
     status();
-}
-
-function interruption (code) {
-    return FORWARDED_SIGNALS.filter(function (signal) {
-        return code === SIGNAL_EXIT_CODE_BASE + signals[signal];
-    })[0];
 }
 
 function status () {
@@ -76,60 +69,50 @@ function status () {
     }
 }
 
-// closes all children and the process
-function close (code, signal) {
-    var i, len, closed = 0, opened = 0;
-
-    for (i = 0, len = children.length; i < len; i++) {
-        if (children[i].exitCode === null && children[i].signalCode === null) {
-            opened++;
-            children[i].removeAllListeners('close');
-            children[i].kill(signal || "SIGINT");
-            if (verbose) console.log('`' + children[i].cmd + '` will now be closed');
-            children[i].on('close', function() {
-                closed++;
-                if (opened == closed) {
-                    exit(code, signal);
-                }
-            });
-        }
-    }
-    if (opened == closed) {exit(code, signal);}
-
+function close (signal) {
+    var running = children.filter(function (child) {
+        return child.exitCode === null && child.signalCode === null;
+    });
+    var remaining = running.length;
+    running.forEach(function (child) {
+        child.removeAllListeners('close');
+        child.kill(signal || 'SIGINT');
+        if (verbose) console.log('`' + child.cmd + '` will now be closed');
+        child.on('close', function () {
+            remaining--;
+            if (remaining === 0) exit(signal);
+        });
+    });
+    if (remaining === 0) exit(signal);
 }
 
-function exit (code, signal) {
+function exit (signal) {
     if (signal) {
         process.removeAllListeners(signal);
         process.kill(process.pid, signal);
     } else {
-        process.exit(code);
+        process.exit();
     }
 }
 
-// cross platform compatibility
 if (process.platform === 'win32') {
     sh = 'cmd';
     shFlag = '/c';
+    commandPrefix = '';
 } else {
     sh = 'sh';
     shFlag = '-c';
+    commandPrefix = 'exec ';
 }
 
 FORWARDED_SIGNALS.forEach(function (signal) {
-    process.once(signal, function () { close(null, signal); });
+    process.once(signal, function () { close(signal); });
 });
 
-// start the children
-children = [];
-cmds.forEach(function (cmd) {
-    if (process.platform != 'win32') {
-      cmd = "exec "+cmd;
-    }
-    var child = spawn(sh,[shFlag,cmd], {
+children = cmds.map(function (cmd) {
+    var child = spawn(sh, [shFlag, commandPrefix + cmd], {
         stdio: ['pipe', process.stdout, process.stderr]
-    })
-    .on('close', childClose);
-    child.cmd = cmd
-    children.push(child)
+    }).on('close', childClose);
+    child.cmd = commandPrefix + cmd;
+    return child;
 });
