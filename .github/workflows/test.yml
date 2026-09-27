@@ -1,5 +1,7 @@
 name: test
 on: [push, pull_request]
+permissions:
+  contents: read
 jobs:
   matrix:
     runs-on: ubuntu-latest
