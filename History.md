@@ -1,3 +1,9 @@
+### v3.0.4
+ - [#41](https://github.com/darkguy2008/parallelshell/issues/41) Mention
+   `& wait` in the README.
+ - Published from GitHub Actions with npm provenance.
+ ([@darkguy2008](https://github.com/darkguy2008))
+
 ### v3.0.3
  - [#64](https://github.com/darkguy2008/parallelshell/issues/64)
    [#67](https://github.com/darkguy2008/parallelshell/issues/67)
