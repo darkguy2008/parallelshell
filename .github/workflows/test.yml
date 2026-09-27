@@ -23,3 +23,4 @@ jobs:
           node-version: ${{ matrix.node }}
       - run: npm install --no-package-lock
       - run: npm test
+        timeout-minutes: 10

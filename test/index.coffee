@@ -9,8 +9,6 @@ WINDOWS = process.platform == "win32"
 onPosix = if WINDOWS then it.skip else it
 onWindows = if WINDOWS then it else it.skip
 WINDOWS_CONTROL_C_EXIT = 0xC000013A
-SEQUENTIAL_PROCESS_STARTS = 3
-POWERSHELL_STARTS_IN_CTRL_C_TEST = 2
 FAILURE_EXIT_CODE = 3
 LATER_FAILURE_EXIT_CODE = 5
 SIGNAL_EXIT_CODE_BASE = 128
@@ -26,17 +24,9 @@ PARALLELSHELL_PATH = path.join __dirname, "..", "index.js"
 FIXTURES_DIR = path.join __dirname, "fixtures"
 CTRL_C_HELPER = path.join FIXTURES_DIR, "ctrl-c.ps1"
 POWERSHELL_ARGS = ["-NoProfile", "-ExecutionPolicy", "Bypass"]
-POWERSHELL_PROBE = "Add-Type -TypeDefinition 'public static class Probe {}'"
 ENV_NAME = "PARALLELSHELL_TEST_ENV"
 ENV_VALUE = "passed-through"
 QUOTED_TEXT = "two  spaces"
-
-elapsedMs = (command, args) ->
-  began = Date.now()
-  childProcess.spawnSync command, args
-  Date.now() - began
-
-NODE_STARTUP_MS = elapsedMs process.execPath, ["-e", ""]
 
 fixture = (name, args...) -> [process.execPath, path.join(FIXTURES_DIR, name)].concat(args).join " "
 exitProcess = (code) -> fixture "exit.js", code
@@ -124,8 +114,6 @@ afterEach ->
     fs.rmdirSync directory
 
 describe "parallelshell", ->
-  @timeout @timeout() + SEQUENTIAL_PROCESS_STARTS * NODE_STARTUP_MS
-
   it "should print on -h and --help", ->
     Promise.all ["-h", "--help"].map (flag) ->
       ps = spawnParallelshell flag
@@ -277,7 +265,6 @@ describe "parallelshell", ->
       result.code.should.equal 0
 
   onWindows "should stop its children and exit with the Ctrl+C status on Ctrl+C", ->
-    @timeout @timeout() + POWERSHELL_STARTS_IN_CTRL_C_TEST * elapsedMs "powershell", POWERSHELL_ARGS.concat ["-Command", POWERSHELL_PROBE]
     ps = track childProcess.spawn "powershell", POWERSHELL_ARGS.concat ["-File", CTRL_C_HELPER, process.execPath, PARALLELSHELL_PATH, waitingProcess(), waitingProcess()]
     waitForReady(ps, 2).then (pids) ->
       ps.stdin.write "\n"

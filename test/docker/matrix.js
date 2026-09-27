@@ -6,11 +6,12 @@ const { nodeReleases, supportedMajors } = require('../support/node-lines');
 
 const IMAGE_VARIANTS = ['', '-alpine', '-slim'];
 const LINUX_RELEASE_FILE = 'linux-x64';
+const SUITE_TIMEOUT_MS = 10 * 60 * 1000;
 const repoRoot = path.resolve(__dirname, '..', '..');
 
-function run(command, args) {
+function run(command, args, options) {
     return new Promise(resolve => {
-        const child = spawn(command, args);
+        const child = spawn(command, args, options);
         let stdout = '';
         let output = '';
         child.stdout.on('data', data => { stdout += data; output += data; });
@@ -44,7 +45,7 @@ async function build(tag, hostPlatform) {
 
 async function runTests(prepared) {
     if (!prepared.testImage) return prepared;
-    const tests = await run('docker', ['run', '--rm', '--init', '-v', repoRoot + ':/deps/app:ro', prepared.testImage]);
+    const tests = await run('docker', ['run', '--rm', '--init', '-v', repoRoot + ':/deps/app:ro', prepared.testImage], { timeout: SUITE_TIMEOUT_MS });
     const failed = tests.code !== 0;
     return { image: prepared.image, failed, status: (failed ? 'FAIL' : 'pass') + prepared.note, output: tests.output };
 }
@@ -54,10 +55,7 @@ async function main() {
     const tags = requested.length ? requested : await supportedTags();
     const hostPlatform = (await run('docker', ['version', '--format', '{{.Server.Os}}/{{.Server.Arch}}'])).stdout.trim();
     const prepared = await Promise.all(tags.map(tag => build(tag, hostPlatform)));
-    const results = [];
-    for (const image of prepared) {
-        results.push(await runTests(image));
-    }
+    const results = await Promise.all(prepared.map(runTests));
     const failures = results.filter(result => result.failed);
     for (const result of failures) {
         console.log('===== ' + result.image + ' =====\n' + result.output);
