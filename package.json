@@ -5,7 +5,7 @@
   "homepage": "https://github.com/darkguy2008/parallelshell",
   "repository": {
     "type": "git",
-    "url": "git@github.com:darkguy2008/parallelshell.git"
+    "url": "git+https://github.com/darkguy2008/parallelshell.git"
   },
   "bugs": {
     "url": "https://github.com/darkguy2008/parallelshell/issues"
@@ -15,7 +15,7 @@
   ],
   "main": "index.js",
   "bin": {
-    "parallelshell": "./index.js"
+    "parallelshell": "index.js"
   },
   "scripts": {
     "test": "mocha",
