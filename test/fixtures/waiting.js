@@ -1,10 +1,17 @@
 'use strict';
-var MAX_TIMER_DELAY_MS = 2147483647;
-var exitCode = Number(process.argv[2] || 0);
+var fs = require('fs');
+var path = require('path');
 
-process.on('SIGUSR2', function () {
-    console.log('done');
-    process.exit(exitCode);
-});
+var trigger = process.argv[2];
+var code = Number(process.argv[3]);
+
+function exitIfTriggered () {
+    if (fs.existsSync(trigger)) {
+        console.log('done');
+        process.exit(code);
+    }
+}
+
+fs.watch(path.dirname(trigger), exitIfTriggered);
 console.log('ready ' + process.pid);
-setInterval(function () {}, MAX_TIMER_DELAY_MS);
+exitIfTriggered();

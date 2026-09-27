@@ -8,7 +8,8 @@ var SIGNAL_EXIT_CODE_BASE = 128;
 var FORWARDED_SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'];
 var WINDOWS_CONTROL_C_EXIT = 0xC000013A;
 
-var commandPrefix = process.platform === 'win32' ? '' : 'exec ';
+var WINDOWS = process.platform === 'win32';
+var commandPrefix = WINDOWS ? '' : 'exec ';
 var children, args, wait, cmds, verbose, i ,len;
 cmds = [];
 args = process.argv.slice(2);
@@ -77,28 +78,32 @@ function close (signal) {
         return child.exitCode === null && child.signalCode === null;
     });
     var remaining = running.length;
+    if (remaining === 0) return exit(signal);
     running.forEach(function (child) {
         child.removeAllListeners('close');
-        stop(child, signal || 'SIGINT');
         if (verbose) console.log('`' + child.cmd + '` will now be closed');
         child.on('close', function () {
             remaining--;
             if (remaining === 0) exit(signal);
         });
     });
-    if (remaining === 0) exit(signal);
+    stop(running, signal || 'SIGINT');
 }
 
-function stop (child, signal) {
-    if (process.platform === 'win32') {
-        spawn(path.join(process.env.SystemRoot, 'System32', 'taskkill.exe'), ['/T', '/F', '/PID', String(child.pid)], { stdio: 'ignore' });
+function stop (running, signal) {
+    if (WINDOWS) {
+        spawn(path.join(process.env.SystemRoot, 'System32', 'taskkill.exe'), running.reduce(function (taskkillArgs, child) {
+            return taskkillArgs.concat('/PID', String(child.pid));
+        }, ['/T', '/F']), { stdio: 'ignore' });
     } else {
-        child.kill(signal);
+        running.forEach(function (child) {
+            child.kill(signal);
+        });
     }
 }
 
 function exit (signal) {
-    if (signal && process.platform === 'win32') {
+    if (signal && WINDOWS) {
         process.exit(WINDOWS_CONTROL_C_EXIT);
     } else if (signal) {
         process.removeAllListeners(signal);
@@ -113,10 +118,11 @@ FORWARDED_SIGNALS.forEach(function (signal) {
 });
 
 children = cmds.map(function (cmd) {
-    var child = spawn(commandPrefix + cmd, {
+    var command = commandPrefix + cmd;
+    var child = spawn(command, {
         shell: true,
         stdio: ['pipe', process.stdout, process.stderr]
     }).on('close', childClose);
-    child.cmd = commandPrefix + cmd;
+    child.cmd = command;
     return child;
 });

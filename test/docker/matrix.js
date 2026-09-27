@@ -2,9 +2,10 @@
 'use strict';
 const { spawn } = require('child_process');
 const path = require('path');
-const { supportedMajors } = require('../support/node-lines');
+const { nodeReleases, supportedMajors } = require('../support/node-lines');
 
 const IMAGE_VARIANTS = ['', '-alpine', '-slim'];
+const LINUX_RELEASE_FILE = 'linux-x64';
 const repoRoot = path.resolve(__dirname, '..', '..');
 
 function run(command, args) {
@@ -19,7 +20,7 @@ function run(command, args) {
 }
 
 async function supportedTags() {
-    return (await supportedMajors()).flatMap(major => IMAGE_VARIANTS.map(variant => major + variant));
+    return supportedMajors(await nodeReleases(), LINUX_RELEASE_FILE).flatMap(major => IMAGE_VARIANTS.map(variant => major + variant));
 }
 
 async function unavailable(image, hostPlatform, pull) {
