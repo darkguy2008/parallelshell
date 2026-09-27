@@ -2,6 +2,7 @@
 
 'use strict';
 var spawn = require('child_process').spawn;
+var path = require('path');
 var signals = require('constants');
 var SIGNAL_EXIT_CODE_BASE = 128;
 var FORWARDED_SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'];
@@ -77,7 +78,7 @@ function close (signal) {
     var remaining = running.length;
     running.forEach(function (child) {
         child.removeAllListeners('close');
-        child.kill(signal || 'SIGINT');
+        stop(child, signal || 'SIGINT');
         if (verbose) console.log('`' + child.cmd + '` will now be closed');
         child.on('close', function () {
             remaining--;
@@ -85,6 +86,14 @@ function close (signal) {
         });
     });
     if (remaining === 0) exit(signal);
+}
+
+function stop (child, signal) {
+    if (process.platform === 'win32') {
+        spawn(path.join(process.env.SystemRoot, 'System32', 'taskkill.exe'), ['/T', '/F', '/PID', String(child.pid)], { stdio: 'ignore' });
+    } else {
+        child.kill(signal);
+    }
 }
 
 function exit (signal) {

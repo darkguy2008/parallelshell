@@ -259,3 +259,13 @@ describe "parallelshell", ->
     ps.exited.then (result) ->
       ps.errorOutput.should.equal ""
       result.code.should.equal 0
+
+  it "should stop a sibling's whole command when a child fails", ->
+    file = triggerFile()
+    ps = spawnParallelshell waitingProcess, exitWhenFileProcess(file, FAILURE_EXIT_CODE)
+    waitForReady(ps, 2).then (pids) ->
+      fs.writeFileSync file, ""
+      ps.exited.then (result) ->
+        fs.unlinkSync file
+        result.code.should.equal FAILURE_EXIT_CODE
+        pids.filter(isAlive).should.be.empty
