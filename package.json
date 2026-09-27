@@ -10,6 +10,9 @@
   "bugs": {
     "url": "https://github.com/keithamus/parallelshell/issues"
   },
+  "files": [
+    "index.js"
+  ],
   "main": "index.js",
   "bin": {
     "parallelshell": "./index.js"
