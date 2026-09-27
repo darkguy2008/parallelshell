@@ -1,0 +1,29 @@
+name: publish
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to publish, for example v2.0.2
+        required: true
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: npm
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          registry-url: https://registry.npmjs.org
+      - run: |
+          major=$(node -p "require('./package.json').version.split('.')[0]")
+          latest_major=$(npm view . dist-tags.latest | cut -d. -f1)
+          if [ "$major" -ge "$latest_major" ]; then tag=latest; else tag=legacy-$major; fi
+          npm publish --tag "$tag"
