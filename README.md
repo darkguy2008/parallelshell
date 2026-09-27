@@ -20,7 +20,7 @@ non-zero exit status, the rest are stopped and the exit code carries through.
 
 * `&` creates a background process, which only exits if you kill it or it ends. `parallelshell` will autokill processes if one of the others dies.
 
-* `command1 & command2 & command3` will wait in the terminal until command3 ends only. parallelshell will wait until all 3 end.
+* `command1 & command2 & command3` only waits until command3 ends. Adding `& wait` at the end (`command1 & command2 & command3 & wait`) waits for all 3! But Ctrl+C or a failing command still won't stop the others. parallelshell waits for all 3 and stops them all when it needs to.
 
 * If command1 or command2 exit with non-zero exit code, then this will not effect the outcome of your shell (i.e. they can fail and npm/bash/whatever will ignore it). `parallelshell` will not ignore it, and will exit with the first non-zero exit code.
 
