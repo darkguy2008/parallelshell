@@ -9,21 +9,49 @@ on:
         required: true
 permissions:
   contents: read
-  id-token: write
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
 jobs:
   publish:
     runs-on: ubuntu-latest
     environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      dist-tag: ${{ steps.publish.outputs.dist-tag }}
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ env.TAG }}
       - uses: actions/setup-node@v7
         with:
           node-version: lts/*
           registry-url: https://registry.npmjs.org
-      - run: |
+      - id: publish
+        run: |
           major=$(node -p "require('./package.json').version.split('.')[0]")
           latest_major=$(npm view . dist-tags.latest | cut -d. -f1)
           if [ "$major" -ge "$latest_major" ]; then tag=latest; else tag=legacy-$major; fi
           npm publish --tag "$tag"
+          echo "dist-tag=$tag" >> "$GITHUB_OUTPUT"
+  release:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+      - run: |
+          node -e '
+            const lines = require("fs").readFileSync("History.md", "utf8").split("\n");
+            const start = lines.indexOf("### " + process.argv[1]);
+            if (start < 0) throw new Error("History.md has no section for " + process.argv[1]);
+            const next = lines.findIndex((line, index) => index > start && line.startsWith("### "));
+            console.log(lines.slice(start + 1, next < 0 ? lines.length : next).join("\n").trim());
+          ' "$TAG" > notes.md
+          gh release create "$TAG" --verify-tag --title "$TAG" --notes-file notes.md --latest=${{ needs.publish.outputs.dist-tag == 'latest' }}
