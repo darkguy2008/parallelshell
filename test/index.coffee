@@ -1,12 +1,19 @@
 chai = require "chai"
 signals = require "constants"
 should = chai.should()
-spawn = require("child_process").spawn
+childProcess = require("child_process")
+fs = require("fs")
+os = require("os")
 path = require("path")
 
-waitingProcess = "node test/fixtures/waiting.js"
-failingProcess = "false"
-succeedingProcess = "true"
+WINDOWS = process.platform == "win32"
+SEQUENTIAL_PROCESS_STARTS = 3
+startupBegan = Date.now()
+childProcess.spawnSync process.execPath, ["-e", ""]
+NODE_STARTUP_MS = Date.now() - startupBegan
+onPosix = if WINDOWS then it.skip else it
+failingProcess = if WINDOWS then "exit 1" else "false"
+succeedingProcess = if WINDOWS then "exit 0" else "true"
 FAILURE_EXIT_CODE = 3
 LATER_FAILURE_EXIT_CODE = 5
 SIGNAL_EXIT_CODE_BASE = 128
@@ -20,8 +27,13 @@ PARALLELSHELL_PATH = path.join __dirname, "..", "index.js"
 FIXTURES_DIR = path.join __dirname, "fixtures"
 ENV_NAME = "PARALLELSHELL_TEST_ENV"
 ENV_VALUE = "passed-through"
-printCwdProcess = "node -p 'process.cwd()'"
-printEnvProcess = "node -p process.env.#{ENV_NAME}"
+fixture = (name, args...) -> [process.execPath, path.join(FIXTURES_DIR, name)].concat(args).join " "
+waitingProcess = fixture "waiting.js"
+exitProcess = (code) -> fixture "exit.js", code
+exitWhenFileProcess = (file, code) -> fixture "exit-when-file.js", file, code
+triggerFile = -> path.join os.tmpdir(), "parallelshell-trigger-#{process.pid}-#{Date.now()}"
+printCwdProcess = fixture "print-cwd.js"
+printEnvProcess = fixture "print-env.js", ENV_NAME
 
 usageInfo = """
 -h, --help         output usage information
@@ -32,7 +44,7 @@ usageInfo = """
 spawned = []
 
 spawnParallelshellWith = (options, args...) ->
-  ps = spawn process.execPath, [PARALLELSHELL_PATH].concat(args), Object.assign({detached: true}, options)
+  ps = childProcess.spawn process.execPath, [PARALLELSHELL_PATH].concat(args), Object.assign({detached: not WINDOWS}, options)
   ps.output = ""
   ps.errorOutput = ""
   ps.stdout.setEncoding "utf8"
@@ -46,7 +58,7 @@ spawnParallelshellWith = (options, args...) ->
 
 spawnParallelshell = (args...) -> spawnParallelshellWith {}, args...
 
-outputLines = (ps) -> ps.output.split("\n")
+outputLines = (ps) -> ps.output.split(/\r?\n/)
 
 waitForOutput = (ps, predicate) ->
   new Promise (resolve, reject) ->
@@ -78,10 +90,15 @@ doneCount = (ps) ->
   outputLines(ps).filter((line) -> line == DONE_LINE).length
 
 afterEach ->
-  for ps in spawned.splice(0) when isAlive -ps.pid
-    process.kill -ps.pid, "SIGKILL"
+  for ps in spawned.splice(0)
+    if WINDOWS
+      childProcess.spawnSync "taskkill", ["/T", "/F", "/PID", String ps.pid]
+    else if isAlive -ps.pid
+      process.kill -ps.pid, "SIGKILL"
 
 describe "parallelshell", ->
+  @timeout @timeout() + SEQUENTIAL_PROCESS_STARTS * NODE_STARTUP_MS
+
   it "should print on -h and --help", ->
     Promise.all ["-h", "--help"].map (flag) ->
       ps = spawnParallelshell flag
@@ -91,12 +108,12 @@ describe "parallelshell", ->
     spawnParallelshell(failingProcess).exited.then (result) ->
       result.code.should.equal 1
 
-  it "should close sibling processes on child error", ->
+  onPosix "should close sibling processes on child error", ->
     spawnParallelshell(waitingProcess, failingProcess, waitingProcess).exited.then (result) ->
       result.code.should.equal 1
 
   ["-w", "--wait"].forEach (flag) ->
-    it "should wait for sibling processes on child error when called with #{flag}", ->
+    onPosix "should wait for sibling processes on child error when called with #{flag}", ->
       ps = spawnParallelshell flag, "-v", waitingProcess, failingProcess, waitingProcess
       Promise.all [waitForReady(ps, 2), waitForOutput(ps, hasLineEndingWith ERRORED_SUFFIX)]
       .then ([pids]) ->
@@ -105,7 +122,7 @@ describe "parallelshell", ->
       .then ->
         doneCount(ps).should.equal 2
 
-  it "should close on CTRL+C / SIGINT", ->
+  onPosix "should close on CTRL+C / SIGINT", ->
     ps = spawnParallelshell "-w", waitingProcess, failingProcess, waitingProcess
     waitForReady(ps, 2).then ->
       ps.kill "SIGINT"
@@ -127,7 +144,7 @@ describe "parallelshell", ->
       result.code.should.equal 0
       outputLines(ps)[0].should.equal ENV_VALUE
 
-  it "should exit with a failing child's code after a sibling already succeeded", ->
+  onPosix "should exit with a failing child's code after a sibling already succeeded", ->
     ps = spawnParallelshell "-v", succeedingProcess, "#{waitingProcess} #{FAILURE_EXIT_CODE}"
     Promise.all [waitForReady(ps, 1), waitForOutput(ps, hasLineEndingWith SUCCESS_SUFFIX)]
     .then ([[pid]]) ->
@@ -137,7 +154,7 @@ describe "parallelshell", ->
       result.code.should.equal FAILURE_EXIT_CODE
       hasLineEndingWith(CLOSING_SUFFIX)(ps).should.be.false
 
-  it "should exit with the first failing child's code after waiting when called with -w", ->
+  onPosix "should exit with the first failing child's code after waiting when called with -w", ->
     ps = spawnParallelshell "-w", "-v", failingProcess, "#{waitingProcess} #{LATER_FAILURE_EXIT_CODE}"
     Promise.all [waitForReady(ps, 1), waitForOutput(ps, hasLineEndingWith ERRORED_SUFFIX)]
     .then ([[pid]]) ->
@@ -147,7 +164,7 @@ describe "parallelshell", ->
       doneCount(ps).should.equal 1
       result.code.should.equal 1
 
-  it "should close sibling processes and exit with 128 + signal number when a child is killed by a signal", ->
+  onPosix "should close sibling processes and exit with 128 + signal number when a child is killed by a signal", ->
     ps = spawnParallelshell "-v", waitingProcess, waitingProcess
     waitForReady(ps, 2).then ([pid]) ->
       process.kill pid, "SIGKILL"
@@ -156,7 +173,7 @@ describe "parallelshell", ->
       result.code.should.equal SIGNAL_EXIT_CODE_BASE + signals.SIGKILL
 
   FORWARDED_SIGNALS.forEach (signal) ->
-    it "should stop its children with #{signal} and die by #{signal} without crashing", ->
+    onPosix "should stop its children with #{signal} and die by #{signal} without crashing", ->
       ps = spawnParallelshell waitingProcess, waitingProcess
       waitForReady(ps, 2).then (pids) ->
         ps.kill signal
@@ -165,7 +182,7 @@ describe "parallelshell", ->
           result.should.deep.equal {code: null, signal}
           pids.filter(isAlive).should.be.empty
 
-  it "should die by SIGINT when CTRL+C interrupts its whole process group", ->
+  onPosix "should die by SIGINT when CTRL+C interrupts its whole process group", ->
     ps = spawnParallelshell waitingProcess, waitingProcess
     waitForReady(ps, 2).then ->
       process.kill -ps.pid, "SIGINT"
@@ -174,7 +191,7 @@ describe "parallelshell", ->
         result.should.deep.equal {code: null, signal: "SIGINT"}
 
   FORWARDED_SIGNALS.forEach (signal) ->
-    it "should stop its siblings and die by #{signal} when a child is stopped by #{signal}", ->
+    onPosix "should stop its siblings and die by #{signal} when a child is stopped by #{signal}", ->
       ps = spawnParallelshell waitingProcess, waitingProcess
       waitForReady(ps, 2).then ([interruptedPid, siblingPid]) ->
         process.kill interruptedPid, signal
@@ -182,7 +199,7 @@ describe "parallelshell", ->
           result.should.deep.equal {code: null, signal}
           isAlive(siblingPid).should.be.false
 
-  it "should stop its siblings and die by SIGINT when a child exits with the interrupted status", ->
+  onPosix "should stop its siblings and die by SIGINT when a child exits with the interrupted status", ->
     interruptedProcess = "#{waitingProcess} #{SIGNAL_EXIT_CODE_BASE + signals.SIGINT}"
     ps = spawnParallelshell interruptedProcess, interruptedProcess
     waitForReady(ps, 2).then ([interruptedPid, siblingPid]) ->
@@ -191,7 +208,7 @@ describe "parallelshell", ->
         result.should.deep.equal {code: null, signal: "SIGINT"}
         isAlive(siblingPid).should.be.false
 
-  it "should keep siblings running and exit with the interrupted status when a child is interrupted with -w", ->
+  onPosix "should keep siblings running and exit with the interrupted status when a child is interrupted with -w", ->
     ps = spawnParallelshell "-w", "-v", waitingProcess, waitingProcess
     waitForReady(ps, 2).then ([interruptedPid, siblingPid]) ->
       process.kill interruptedPid, "SIGINT"
@@ -201,3 +218,28 @@ describe "parallelshell", ->
     .then (result) ->
       doneCount(ps).should.equal 1
       result.code.should.equal SIGNAL_EXIT_CODE_BASE + signals.SIGINT
+
+  it "should print every command's output", ->
+    ps = spawnParallelshell "echo first", "echo second"
+    ps.exited.then (result) ->
+      result.code.should.equal 0
+      outputLines(ps).should.include.members ["first", "second"]
+
+  it "should exit with a failing child's code", ->
+    spawnParallelshell(exitProcess FAILURE_EXIT_CODE).exited.then (result) ->
+      result.code.should.equal FAILURE_EXIT_CODE
+
+  it "should exit with the failing child's code after waiting when called with -w", ->
+    spawnParallelshell("-w", exitProcess(FAILURE_EXIT_CODE), exitProcess(0)).exited.then (result) ->
+      result.code.should.equal FAILURE_EXIT_CODE
+
+  it "should exit with a failing child's code when it fails after a sibling succeeded", ->
+    file = triggerFile()
+    ps = spawnParallelshell "-v", exitProcess(0), exitWhenFileProcess(file, FAILURE_EXIT_CODE)
+    Promise.all [waitForReady(ps, 1), waitForOutput(ps, hasLineEndingWith SUCCESS_SUFFIX)]
+    .then ->
+      fs.writeFileSync file, ""
+      ps.exited
+    .then (result) ->
+      fs.unlinkSync file
+      result.code.should.equal FAILURE_EXIT_CODE
