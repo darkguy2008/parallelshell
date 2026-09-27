@@ -2,20 +2,20 @@
   "name": "parallelshell",
   "version": "1.2.1",
   "description": "Invoke multiple commands, running in parallel",
-  "homepage": "https://github.com/keithamus/parallelshell",
+  "homepage": "https://github.com/darkguy2008/parallelshell",
   "repository": {
     "type": "git",
-    "url": "git@github.com:keithamus/parallelshell.git"
+    "url": "git+https://github.com/darkguy2008/parallelshell.git"
   },
   "bugs": {
-    "url": "https://github.com/keithamus/parallelshell/issues"
+    "url": "https://github.com/darkguy2008/parallelshell/issues"
   },
   "files": [
     "index.js"
   ],
   "main": "index.js",
   "bin": {
-    "parallelshell": "./index.js"
+    "parallelshell": "index.js"
   },
   "scripts": {
     "test": "mocha"
