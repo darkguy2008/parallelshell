@@ -2,8 +2,8 @@
 'use strict';
 const { spawn } = require('child_process');
 const path = require('path');
+const { supportedMajors } = require('../support/node-lines');
 
-const NODE_RELEASES_URL = 'https://nodejs.org/dist/index.json';
 const IMAGE_VARIANTS = ['', '-alpine', '-slim'];
 const repoRoot = path.resolve(__dirname, '..', '..');
 
@@ -19,12 +19,7 @@ function run(command, args) {
 }
 
 async function supportedTags() {
-    const releases = await (await fetch(NODE_RELEASES_URL)).json();
-    const majorOf = release => Number(release.version.slice(1).split('.')[0]);
-    const majors = new Set(releases.filter(release => release.lts).map(majorOf));
-    majors.add(majorOf(releases[0]));
-    const sortedMajors = [...majors].sort((a, b) => a - b);
-    return sortedMajors.flatMap(major => IMAGE_VARIANTS.map(variant => major + variant));
+    return (await supportedMajors()).flatMap(major => IMAGE_VARIANTS.map(variant => major + variant));
 }
 
 async function unavailable(image, hostPlatform, pull) {

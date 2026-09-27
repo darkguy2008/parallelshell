@@ -1,0 +1,28 @@
+name: test
+on: [push, pull_request]
+jobs:
+  matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      runs: ${{ steps.lines.outputs.runs }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: latest
+      - id: lines
+        run: echo "runs=$(node test/support/node-lines.js)" >> "$GITHUB_OUTPUT"
+  test:
+    needs: matrix
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.matrix.outputs.runs) }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm install --no-package-lock
+      - run: npm test
