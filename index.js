@@ -6,6 +6,7 @@ var path = require('path');
 var signals = require('constants');
 var SIGNAL_EXIT_CODE_BASE = 128;
 var FORWARDED_SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'];
+var WINDOWS_CONTROL_C_EXIT = 0xC000013A;
 
 var commandPrefix = process.platform === 'win32' ? '' : 'exec ';
 var children, args, wait, cmds, verbose, i ,len;
@@ -97,7 +98,9 @@ function stop (child, signal) {
 }
 
 function exit (signal) {
-    if (signal) {
+    if (signal && process.platform === 'win32') {
+        process.exit(WINDOWS_CONTROL_C_EXIT);
+    } else if (signal) {
         process.removeAllListeners(signal);
         process.kill(process.pid, signal);
     } else {

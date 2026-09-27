@@ -11,7 +11,12 @@ SEQUENTIAL_PROCESS_STARTS = 3
 startupBegan = Date.now()
 childProcess.spawnSync process.execPath, ["-e", ""]
 NODE_STARTUP_MS = Date.now() - startupBegan
+powershellStartupBegan = Date.now()
+childProcess.spawnSync "powershell", ["-NoProfile", "-Command", "Add-Type -TypeDefinition 'public static class Probe {}'"] if WINDOWS
+POWERSHELL_STARTUP_MS = Date.now() - powershellStartupBegan
 onPosix = if WINDOWS then it.skip else it
+onWindows = if WINDOWS then it else it.skip
+WINDOWS_CONTROL_C_EXIT = 0xC000013A
 failingProcess = if WINDOWS then "exit 1" else "false"
 succeedingProcess = if WINDOWS then "exit 0" else "true"
 FAILURE_EXIT_CODE = 3
@@ -269,3 +274,17 @@ describe "parallelshell", ->
         fs.unlinkSync file
         result.code.should.equal FAILURE_EXIT_CODE
         pids.filter(isAlive).should.be.empty
+
+  onWindows "should stop its children and exit with the Ctrl+C status on Ctrl+C", ->
+    @timeout @timeout() + POWERSHELL_STARTUP_MS
+    helper = childProcess.spawn "powershell", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", path.join(FIXTURES_DIR, "ctrl-c.ps1"), process.execPath, PARALLELSHELL_PATH, waitingProcess, waitingProcess]
+    report = ""
+    helper.stdout.on "data", (data) -> report += data
+    new Promise (resolve) -> helper.on "close", resolve
+    .then ->
+      result = JSON.parse report
+      result.stderr.should.not.contain "Error"
+      result.code.should.equal WINDOWS_CONTROL_C_EXIT
+      pids = result.stdout.split(/\r?\n/).filter((line) -> line.indexOf(READY_PREFIX) == 0).map (line) -> Number line.slice READY_PREFIX.length
+      pids.should.have.length 2
+      pids.filter(isAlive).should.be.empty
