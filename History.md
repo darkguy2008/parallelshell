@@ -1,3 +1,24 @@
+### v3.0.3
+ - [#64](https://github.com/darkguy2008/parallelshell/issues/64)
+   [#67](https://github.com/darkguy2008/parallelshell/issues/67)
+   [#71](https://github.com/darkguy2008/parallelshell/issues/71) Fix crash on
+   Node >= 10 where it says that cwd is not a string.
+ - [#55](https://github.com/darkguy2008/parallelshell/issues/55)
+   [#36](https://github.com/darkguy2008/parallelshell/issues/36) Exit with the
+   first failing child's code, also with `-w` and when a child is killed by a
+   signal ([#68](https://github.com/darkguy2008/parallelshell/pull/68),
+   [@hagaigold](https://github.com/hagaigold)).
+ - Fix crash on Ctrl+C with Node >= 20: children are stopped and parallelshell
+   dies by SIGINT, including during start-up.
+ - [#39](https://github.com/darkguy2008/parallelshell/issues/39) Forward
+   SIGTERM and SIGHUP to children.
+ - [#74](https://github.com/darkguy2008/parallelshell/issues/74) Run commands
+   through Node's shell option, fixing `spawn cmd ENOENT` and double-quoted
+   commands on Windows.
+ - Windows: stop a child's whole process tree, and exit with the Ctrl+C status
+   on Ctrl+C.
+ ([@darkguy2008](https://github.com/darkguy2008))
+
 ### v3.0.2
  - [#60](https://github.com/keithamus/parallelshell/pulls/60) < Node 8 fix
  - [#33](https://github.com/keithamus/parallelshell/issues/33) Readme fix
