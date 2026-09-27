@@ -27,6 +27,7 @@ PARALLELSHELL_PATH = path.join __dirname, "..", "index.js"
 FIXTURES_DIR = path.join __dirname, "fixtures"
 ENV_NAME = "PARALLELSHELL_TEST_ENV"
 ENV_VALUE = "passed-through"
+QUOTED_TEXT = "two  spaces"
 fixture = (name, args...) -> [process.execPath, path.join(FIXTURES_DIR, name)].concat(args).join " "
 waitingProcess = fixture "waiting.js"
 exitProcess = (code) -> fixture "exit.js", code
@@ -243,3 +244,18 @@ describe "parallelshell", ->
     .then (result) ->
       fs.unlinkSync file
       result.code.should.equal FAILURE_EXIT_CODE
+
+  it "should run a command containing double quotes as written", ->
+    ps = spawnParallelshell "#{process.execPath} -e \"console.log('#{QUOTED_TEXT}')\""
+    ps.exited.then (result) ->
+      result.code.should.equal 0
+      outputLines(ps)[0].should.equal QUOTED_TEXT
+
+  it "should run commands when PATH does not contain the shell", ->
+    env = {}
+    env[name] = value for name, value of process.env when name.toUpperCase() != "PATH"
+    env.PATH = path.dirname process.execPath
+    ps = spawnParallelshellWith {env}, exitProcess(0)
+    ps.exited.then (result) ->
+      ps.errorOutput.should.equal ""
+      result.code.should.equal 0

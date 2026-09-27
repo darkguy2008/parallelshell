@@ -6,7 +6,8 @@ var signals = require('constants');
 var SIGNAL_EXIT_CODE_BASE = 128;
 var FORWARDED_SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'];
 
-var sh, shFlag, commandPrefix, children, args, wait, cmds, verbose, i ,len;
+var commandPrefix = process.platform === 'win32' ? '' : 'exec ';
+var children, args, wait, cmds, verbose, i ,len;
 cmds = [];
 args = process.argv.slice(2);
 for (i = 0, len = args.length; i < len; i++) {
@@ -95,22 +96,13 @@ function exit (signal) {
     }
 }
 
-if (process.platform === 'win32') {
-    sh = 'cmd';
-    shFlag = '/c';
-    commandPrefix = '';
-} else {
-    sh = 'sh';
-    shFlag = '-c';
-    commandPrefix = 'exec ';
-}
-
 FORWARDED_SIGNALS.forEach(function (signal) {
     process.once(signal, function () { close(signal); });
 });
 
 children = cmds.map(function (cmd) {
-    var child = spawn(sh, [shFlag, commandPrefix + cmd], {
+    var child = spawn(commandPrefix + cmd, {
+        shell: true,
         stdio: ['pipe', process.stdout, process.stderr]
     }).on('close', childClose);
     child.cmd = commandPrefix + cmd;
