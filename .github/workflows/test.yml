@@ -8,7 +8,7 @@ jobs:
     outputs:
       runs: ${{ steps.lines.outputs.runs }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - id: lines
         run: echo "runs=$(node test/support/node-lines.js)" >> "$GITHUB_OUTPUT"
   test:
@@ -19,7 +19,7 @@ jobs:
         include: ${{ fromJSON(needs.matrix.outputs.runs) }}
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.node }}
