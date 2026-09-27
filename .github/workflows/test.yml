@@ -24,3 +24,9 @@ jobs:
       - run: npm install --no-package-lock
       - run: npm test
         timeout-minutes: 10
+  result:
+    needs: test
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - run: test "${{ needs.test.result }}" = success
