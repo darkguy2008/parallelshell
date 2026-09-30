@@ -1,3 +1,8 @@
+### v3.2.0
+ - [#31](https://github.com/darkguy2008/parallelshell/issues/31) Add
+   `-n, --npm <pattern>` to run npm scripts with wildcard matching,
+   mixed with ordinary commands. Validate all selections before launching.
+
 ### v3.1.0
  - [#40](https://github.com/darkguy2008/parallelshell/issues/40) Add
    `-t, --timeout <seconds>` to stop remaining commands after a deadline,
