@@ -27,6 +27,9 @@ POWERSHELL_ARGS = ["-NoProfile", "-ExecutionPolicy", "Bypass"]
 ENV_NAME = "PARALLELSHELL_TEST_ENV"
 ENV_VALUE = "passed-through"
 QUOTED_TEXT = "two  spaces"
+TIMEOUT_SECONDS = 2
+TIMEOUT_EXIT_CODE = 124
+COMPLETION_TIMEOUT_SECONDS = 60
 
 fixture = (name, args...) -> [process.execPath, path.join(FIXTURES_DIR, name)].concat(args).join " "
 exitProcess = (code) -> fixture "exit.js", code
@@ -39,6 +42,7 @@ usageInfo = """
 -h, --help         output usage information
 -v, --verbose      verbose logging
 -w, --wait         will not close sibling processes on error
+-t, --timeout <seconds>  stop remaining commands after the deadline
 """ + "\n"
 
 spawned = []
@@ -114,6 +118,62 @@ afterEach ->
     fs.rmdirSync directory
 
 describe "parallelshell", ->
+  ["-t", "--timeout"].forEach (flag) ->
+    it "should stop running commands at the deadline with #{flag}", ->
+      ps = spawnParallelshell flag, String(TIMEOUT_SECONDS), succeedingProcess, waitingProcess(), waitingProcess()
+      waitForReady(ps, 2).then (pids) ->
+        ps.exited.then (result) ->
+          result.should.deep.equal {code: TIMEOUT_EXIT_CODE, signal: null}
+          ps.errorOutput.should.contain "timed out after #{TIMEOUT_SECONDS} seconds"
+          pids.filter(isAlive).should.be.empty
+
+  it "should time out with --wait and preserve an earlier failure", ->
+    ps = spawnParallelshell "--wait", "-v", "--timeout", String(TIMEOUT_SECONDS), exitProcess(FAILURE_EXIT_CODE), waitingProcess()
+    Promise.all [waitForReady(ps, 1), waitForOutput(ps, hasLineEndingWith ERRORED_SUFFIX)]
+    .then ([pids]) ->
+      ps.exited.then (result) ->
+        result.code.should.equal FAILURE_EXIT_CODE
+        ps.errorOutput.should.contain "timed out"
+        pids.filter(isAlive).should.be.empty
+
+  it "should time out successful commands that remain running with --wait", ->
+    ps = spawnParallelshell "--wait", "--timeout", String(TIMEOUT_SECONDS), waitingProcess()
+    ps.exited.then (result) -> result.code.should.equal TIMEOUT_EXIT_CODE
+
+  it "should cancel a timeout when every command finishes", ->
+    ps = spawnParallelshell "--timeout", String(COMPLETION_TIMEOUT_SECONDS), succeedingProcess, succeedingProcess
+    ps.exited.then (result) ->
+      result.code.should.equal 0
+      ps.errorOutput.should.equal ""
+
+  it "should cancel a timeout when a command fails", ->
+    ps = spawnParallelshell "--timeout", String(COMPLETION_TIMEOUT_SECONDS), exitProcess FAILURE_EXIT_CODE
+    ps.exited.then (result) ->
+      result.code.should.equal FAILURE_EXIT_CODE
+      ps.errorOutput.should.not.contain "timed out"
+
+  it "should retain the failure code when all commands finish with --wait", ->
+    ps = spawnParallelshell "--wait", "--timeout", String(COMPLETION_TIMEOUT_SECONDS), exitProcess(FAILURE_EXIT_CODE), succeedingProcess
+    ps.exited.then (result) ->
+      result.code.should.equal FAILURE_EXIT_CODE
+      ps.errorOutput.should.not.contain "timed out"
+
+  it "should exit successfully with a timeout and no commands", ->
+    spawnParallelshell("--timeout", String(COMPLETION_TIMEOUT_SECONDS)).exited.then (result) -> result.code.should.equal 0
+
+  it "should accept fractional timeout seconds", ->
+    spawnParallelshell("--timeout", "0.001", waitingProcess()).exited.then (result) -> result.code.should.equal TIMEOUT_EXIT_CODE
+
+  [undefined, "0", "-1", "nope", "Infinity", "2147483.648", "--wait"].forEach (value) ->
+    it "should reject invalid timeout #{value} before launching commands", ->
+      args = [succeedingProcess, "--timeout"]
+      args.push value if value != undefined
+      ps = spawnParallelshell args...
+      ps.exited.then (result) ->
+        result.code.should.equal 1
+        ps.output.should.equal ""
+        ps.errorOutput.should.contain "--timeout requires positive seconds"
+
   it "should print on -h and --help", ->
     Promise.all ["-h", "--help"].map (flag) ->
       ps = spawnParallelshell flag
@@ -203,7 +263,7 @@ describe "parallelshell", ->
 
   FORWARDED_SIGNALS.forEach (signal) ->
     onPosix "should stop its children with #{signal} and die by #{signal} without crashing", ->
-      ps = spawnParallelshell waitingProcess(), waitingProcess()
+      ps = spawnParallelshell "--timeout", String(COMPLETION_TIMEOUT_SECONDS), waitingProcess(), waitingProcess()
       waitForReady(ps, 2).then (pids) ->
         ps.kill signal
         ps.exited.then (result) ->

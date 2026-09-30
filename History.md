@@ -1,3 +1,8 @@
+### v3.1.0
+ - [#40](https://github.com/darkguy2008/parallelshell/issues/40) Add
+   `-t, --timeout <seconds>` to stop remaining commands after a deadline,
+   including with `--wait`.
+
 ### v3.0.4
  - [#41](https://github.com/darkguy2008/parallelshell/issues/41) Mention
    `& wait` in the README.

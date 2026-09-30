@@ -67,5 +67,24 @@ Available options:
 -h, --help         output usage information
 -v, --verbose      verbose logging
 -w, --wait         will not close sibling processes on error
+-t, --timeout <seconds>  stop remaining commands after the deadline
 
 ```
+
+Use `--timeout` (or `-t`) to limit the overall run, including when `--wait` is
+enabled:
+
+```bash
+parallelshell --timeout 10 "node server.js" "node request.js"
+```
+
+The deadline starts after the commands are launched. Seconds may be fractional
+and must be positive and no greater than 2147483.647. If commands are still
+running at the deadline, parallelshell reports the timeout and exits with code
+124, or preserves an earlier non-zero command exit code with `--wait`. Commands
+that finish before the deadline retain their normal exit status.
+
+Timeouts use the existing shutdown behavior: SIGINT to direct children on Unix,
+and forced process-tree termination on Windows. On Unix this is not a guaranteed
+hard deadline: commands that ignore SIGINT or leave descendants running may keep
+the run alive.
