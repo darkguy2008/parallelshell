@@ -68,8 +68,29 @@ Available options:
 -v, --verbose      verbose logging
 -w, --wait         will not close sibling processes on error
 -t, --timeout <seconds>  stop remaining commands after the deadline
+-n, --npm <pattern>  run matching npm scripts from package.json
 
 ```
+
+Use `-n` (or `--npm`) before each npm script name or pattern:
+
+```bash
+parallelshell -n "build:*" "echo ordinary command" -n "test:{unit,integration}"
+```
+
+Scripts are read from `package.json` in the current directory and run through
+`npm run`, including npm's pre/post lifecycle scripts. npm must be on PATH.
+Exact script names take precedence over patterns. Patterns use minimatch syntax:
+`*`, `?`, character classes, braces and extended globs such as `build:+(js|css)`.
+Matching is case-sensitive, includes names starting with a dot and treats leading
+`#` and `!` literally. `/` separates pattern segments; use `**` across segments.
+Quote patterns with double quotes so they work on Windows and are not expanded
+by your shell. Matches follow package.json order; repeated selections run again.
+All selections are validated before any command starts. Missing values, unmatched
+patterns and missing or invalid package.json files exit with code 1.
+
+This shorthand uses the existing shutdown behavior. The npm-script shutdown
+limitation on Debian/Ubuntu tracked in #22 remains unchanged.
 
 Use `--timeout` (or `-t`) to limit the overall run, including when `--wait` is
 enabled:

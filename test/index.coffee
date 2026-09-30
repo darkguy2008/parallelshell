@@ -43,6 +43,7 @@ usageInfo = """
 -v, --verbose      verbose logging
 -w, --wait         will not close sibling processes on error
 -t, --timeout <seconds>  stop remaining commands after the deadline
+-n, --npm <pattern>  run matching npm scripts from package.json
 """ + "\n"
 
 spawned = []
@@ -115,9 +116,116 @@ afterEach ->
   for directory in triggerDirectories.splice(0)
     trigger = path.join directory, TRIGGER_NAME
     fs.unlinkSync trigger if fs.existsSync trigger
+    manifest = path.join directory, "package.json"
+    fs.unlinkSync manifest if fs.existsSync manifest
+    npmLog = path.join directory, "npm-debug.log"
+    fs.unlinkSync npmLog if fs.existsSync npmLog
     fs.rmdirSync directory
 
 describe "parallelshell", ->
+  describe "npm scripts", ->
+    scriptNames = ["build:js", "build:css", "build:html", "test:js", ".hidden", "#hash", "!bang", "literal*", "two words", "quote\"name", "amp&name", "percent%PATH%", "nested/build/js"]
+
+    project = (scripts) ->
+      directory = path.dirname newTrigger()
+      fs.writeFileSync path.join(directory, "package.json"), JSON.stringify {name: "parallelshell-fixture", version: "1.0.0", scripts}
+      directory
+
+    npmProject = ->
+      scripts = {}
+      for name in scriptNames
+        scripts[name] = "node -e \"console.log('script '+process.env.npm_lifecycle_event)\""
+      project scripts
+
+    runScripts = (args...) -> spawnParallelshellWith {cwd: npmProject()}, args...
+
+    ["-n", "--npm"].forEach (flag) ->
+      it "should run an exact npm script with #{flag}", ->
+        ps = runScripts flag, "build:js"
+        ps.exited.then (result) ->
+          result.code.should.equal 0, ps.output + ps.errorOutput
+          outputLines(ps).should.include "script build:js"
+
+    patterns = {
+      "build:*": ["build:js", "build:css", "build:html"]
+      "*:js": ["build:js", "test:js"]
+      "b*:j?": ["build:js"]
+      "build:{js,css}": ["build:js", "build:css"]
+      "build:[ch]*": ["build:css", "build:html"]
+      "build:+(js|css)": ["build:js", "build:css"]
+      "literal*": ["literal*"]
+      ".*": [".hidden"]
+      "#hash": ["#hash"]
+      "!bang": ["!bang"]
+      "two words": ["two words"]
+      "quote\"name": ["quote\"name"]
+      "amp&name": ["amp&name"]
+      "percent%PATH%": ["percent%PATH%"]
+      "nested/**": ["nested/build/js"]
+    }
+    Object.keys(patterns).forEach (pattern) ->
+      it "should expand #{pattern} against script names", ->
+        ps = runScripts "-n", pattern
+        ps.exited.then (result) ->
+          result.code.should.equal 0, ps.output + ps.errorOutput
+          outputLines(ps).filter((line) -> line.indexOf("script ") == 0).sort().should.deep.equal patterns[pattern].map((name) -> "script #{name}").sort()
+
+    it "should mix repeated npm options with ordinary commands and existing options", ->
+      ps = runScripts "-w", "-n", "build:js", "echo ordinary", "--npm", "build:css", "-t", String(COMPLETION_TIMEOUT_SECONDS)
+      ps.exited.then (result) ->
+        result.code.should.equal 0
+        outputLines(ps).should.include.members ["ordinary", "script build:js", "script build:css"]
+
+    it "should preserve explicitly repeated scripts", ->
+      ps = runScripts "-n", "build:js", "-n", "build:js"
+      ps.exited.then (result) ->
+        result.code.should.equal 0
+        outputLines(ps).filter((line) -> line == "script build:js").length.should.equal 2
+
+    it "should preserve npm pre and post lifecycle scripts", ->
+      ps = spawnParallelshellWith {cwd: project({prebuild: "echo lifecycle-pre", build: "echo lifecycle-main", postbuild: "echo lifecycle-post"})}, "-n", "build"
+      ps.exited.then (result) ->
+        result.code.should.equal 0
+        outputLines(ps).filter((line) -> line.indexOf("lifecycle-") == 0).should.deep.equal ["lifecycle-pre", "lifecycle-main", "lifecycle-post"]
+
+    it "should preserve npm failure status", ->
+      ps = spawnParallelshellWith {cwd: project({fail: exitProcess(FAILURE_EXIT_CODE)})}, "-n", "fail"
+      ps.exited.then (result) -> result.code.should.not.equal 0
+
+    [undefined, "", "-w", "missing", "missing:*"].forEach (pattern) ->
+      it "should reject #{pattern} before launching any command", ->
+        args = ["echo ordinary", "-n", "build:js", "-n"]
+        args.push pattern if pattern != undefined
+        ps = runScripts args...
+        ps.exited.then (result) ->
+          result.code.should.equal 1
+          ps.output.should.equal ""
+          ps.errorOutput.should.contain "--npm"
+
+    [null, [], {bad: 42}].forEach (scripts) ->
+      it "should reject missing or invalid script definitions #{JSON.stringify scripts}", ->
+        ps = spawnParallelshellWith {cwd: project(scripts)}, "echo ordinary", "-n", "bad"
+        ps.exited.then (result) ->
+          result.code.should.equal 1
+          ps.output.should.equal ""
+          ps.errorOutput.should.contain "--npm"
+
+    it "should reject invalid package JSON before launching commands", ->
+      directory = project {}
+      fs.writeFileSync path.join(directory, "package.json"), "{"
+      ps = spawnParallelshellWith {cwd: directory}, "echo ordinary", "-n", "build"
+      ps.exited.then (result) ->
+        result.code.should.equal 1
+        ps.output.should.equal ""
+        ps.errorOutput.should.contain "--npm"
+
+    it "should reject a missing package.json before launching commands", ->
+      ps = spawnParallelshellWith {cwd: path.dirname(newTrigger())}, "echo ordinary", "-n", "build"
+      ps.exited.then (result) ->
+        result.code.should.equal 1
+        ps.output.should.equal ""
+        ps.errorOutput.should.contain "--npm"
+
   ["-t", "--timeout"].forEach (flag) ->
     it "should stop running commands at the deadline with #{flag}", ->
       ps = spawnParallelshell flag, String(TIMEOUT_SECONDS), succeedingProcess, waitingProcess(), waitingProcess()
