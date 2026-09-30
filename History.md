@@ -1,3 +1,8 @@
+### v3.2.1
+ - [#31](https://github.com/darkguy2008/parallelshell/issues/31) Report a
+   missing npm once instead of also marking the script as successful.
+   Simplify `--npm` and `--timeout` handling and align `--help` output.
+
 ### v3.2.0
  - [#31](https://github.com/darkguy2008/parallelshell/issues/31) Add
    `-n, --npm <pattern>` to run npm scripts with wildcard matching,
