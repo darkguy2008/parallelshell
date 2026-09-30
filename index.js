@@ -2,6 +2,9 @@
 
 'use strict';
 var spawn = require('child_process').spawn;
+var spawnNpm = require('cross-spawn');
+var fs = require('fs');
+var minimatch = require('minimatch');
 var path = require('path');
 var signals = require('constants');
 var SIGNAL_EXIT_CODE_BASE = 128;
@@ -13,12 +16,36 @@ var MAX_TIMEOUT_MS = Math.pow(2, 31) - 1;
 
 var WINDOWS = process.platform === 'win32';
 var commandPrefix = WINDOWS ? '' : 'exec ';
-var children, args, wait, cmds, verbose, timeout, timer, i ,len;
+var children, args, wait, cmds, verbose, timeout, timer, scripts, i ,len;
 cmds = [];
 args = process.argv.slice(2);
 for (i = 0, len = args.length; i < len; i++) {
     if (args[i][0] === '-') {
         switch (args[i]) {
+            case '-n':
+            case '--npm':
+                var pattern = args[++i];
+                if (!pattern || pattern[0] === '-') {
+                    console.error('--npm requires a script name or pattern');
+                    process.exit(1);
+                }
+                try {
+                    if (!scripts) {
+                        scripts = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8')).scripts;
+                        if (!scripts || typeof scripts !== 'object' || Array.isArray(scripts)) throw new Error('package.json must contain a scripts object');
+                    }
+                    var names = Object.keys(scripts);
+                    var matches = Object.prototype.hasOwnProperty.call(scripts, pattern) ? [pattern] : minimatch.match(names, pattern, { dot: true, nocomment: true, nonegate: true, allowWindowsEscape: true });
+                    if (!matches.length) throw new Error('no npm scripts match ' + JSON.stringify(pattern));
+                    matches.forEach(function (name) {
+                        if (typeof scripts[name] !== 'string') throw new Error('npm script ' + JSON.stringify(name) + ' must be a string');
+                        cmds.push({ script: name });
+                    });
+                } catch (error) {
+                    console.error('--npm: ' + error.message);
+                    process.exit(1);
+                }
+                break;
             case '-t':
             case '--timeout':
                 timeout = Number(args[++i]) * MILLISECONDS_PER_SECOND;
@@ -41,6 +68,7 @@ for (i = 0, len = args.length; i < len; i++) {
                 console.log('-v, --verbose      verbose logging')
                 console.log('-w, --wait         will not close sibling processes on error')
                 console.log('-t, --timeout <seconds>  stop remaining commands after the deadline');
+                console.log('-n, --npm <pattern>  run matching npm scripts from package.json');
                 process.exit();
                 break;
         }
@@ -134,10 +162,20 @@ FORWARDED_SIGNALS.forEach(function (signal) {
 });
 
 children = cmds.map(function (cmd) {
-    var command = commandPrefix + cmd;
-    var child = spawn(command, {
-        shell: true,
+    var command = cmd.script === undefined ? commandPrefix + cmd : 'npm run -- ' + JSON.stringify(cmd.script);
+    var options = {
         stdio: ['pipe', process.stdout, process.stderr]
+    };
+    var child;
+    if (cmd.script === undefined) {
+        options.shell = true;
+        child = spawn(command, options);
+    } else {
+        child = spawnNpm('npm', ['run', '--', cmd.script], options);
+    }
+    child.on('error', function (error) {
+        console.error(error.message);
+        childClose.call(this, 1);
     }).on('close', childClose);
     child.cmd = command;
     return child;
