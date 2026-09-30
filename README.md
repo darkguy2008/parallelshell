@@ -64,48 +64,34 @@ argument parser.
 
 Available options:
 ```
--h, --help         output usage information
--v, --verbose      verbose logging
--w, --wait         will not close sibling processes on error
+-h, --help               output usage information
+-v, --verbose            verbose logging
+-w, --wait               will not close sibling processes on error
 -t, --timeout <seconds>  stop remaining commands after the deadline
--n, --npm <pattern>  run matching npm scripts from package.json
-
+-n, --npm <pattern>      run matching npm scripts from package.json
 ```
 
-Use `-n` (or `--npm`) before each npm script name or pattern:
+Use `-n` (or `--npm`) before each npm script name or
+[minimatch](https://github.com/isaacs/minimatch) pattern, mixed freely with
+ordinary commands:
 
 ```bash
 parallelshell -n "build:*" "echo ordinary command" -n "test:{unit,integration}"
 ```
 
-Scripts are read from `package.json` in the current directory and run through
-`npm run`, including npm's pre/post lifecycle scripts. npm must be on PATH.
-Exact script names take precedence over patterns. Patterns use minimatch syntax:
-`*`, `?`, character classes, braces and extended globs such as `build:+(js|css)`.
-Matching is case-sensitive, includes names starting with a dot and treats leading
-`#` and `!` literally. `/` separates pattern segments; use `**` across segments.
-Quote patterns with double quotes so they work on Windows and are not expanded
-by your shell. Matches follow package.json order; repeated selections run again.
-All selections are validated before any command starts. Missing values, unmatched
-patterns and missing or invalid package.json files exit with code 1.
+Scripts come from `package.json` in the current directory and run through
+`npm run`, so pre/post scripts still apply. Exact names win over patterns.
+Patterns match names starting with `.` and treat a leading `#` or `!` literally.
+Every selection is checked before anything starts: a missing value, an unmatched
+pattern or an unreadable `package.json` exits with code 1.
 
-This shorthand uses the existing shutdown behavior. The npm-script shutdown
-limitation on Debian/Ubuntu tracked in #22 remains unchanged.
-
-Use `--timeout` (or `-t`) to limit the overall run, including when `--wait` is
-enabled:
+Use `-t` (or `--timeout`) to stop everything still running after a number of
+seconds, including with `--wait`:
 
 ```bash
 parallelshell --timeout 10 "node server.js" "node request.js"
 ```
 
-The deadline starts after the commands are launched. Seconds may be fractional
-and must be positive and no greater than 2147483.647. If commands are still
-running at the deadline, parallelshell reports the timeout and exits with code
-124, or preserves an earlier non-zero command exit code with `--wait`. Commands
-that finish before the deadline retain their normal exit status.
-
-Timeouts use the existing shutdown behavior: SIGINT to direct children on Unix,
-and forced process-tree termination on Windows. On Unix this is not a guaranteed
-hard deadline: commands that ignore SIGINT or leave descendants running may keep
-the run alive.
+On timeout parallelshell exits with code 124, or with an earlier failure's code
+under `--wait`. Commands are stopped the same way as on failure, so on Unix a
+command that ignores SIGINT can outlive the deadline.

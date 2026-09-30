@@ -27,9 +27,11 @@ POWERSHELL_ARGS = ["-NoProfile", "-ExecutionPolicy", "Bypass"]
 ENV_NAME = "PARALLELSHELL_TEST_ENV"
 ENV_VALUE = "passed-through"
 QUOTED_TEXT = "two  spaces"
-TIMEOUT_SECONDS = 2
+TIMEOUT_SECONDS = "2"
 TIMEOUT_EXIT_CODE = 124
-COMPLETION_TIMEOUT_SECONDS = 60
+COMPLETION_TIMEOUT_SECONDS = "60"
+FRACTIONAL_TIMEOUT_SECONDS = "0.001"
+PACKAGE_FILES = ["package.json", "npm-debug.log"]
 
 fixture = (name, args...) -> [process.execPath, path.join(FIXTURES_DIR, name)].concat(args).join " "
 exitProcess = (code) -> fixture "exit.js", code
@@ -39,21 +41,23 @@ printCwdProcess = "#{process.execPath} -p \"process.cwd()\""
 printEnvProcess = "#{process.execPath} -p process.env.#{ENV_NAME}"
 
 usageInfo = """
--h, --help         output usage information
--v, --verbose      verbose logging
--w, --wait         will not close sibling processes on error
+-h, --help               output usage information
+-v, --verbose            verbose logging
+-w, --wait               will not close sibling processes on error
 -t, --timeout <seconds>  stop remaining commands after the deadline
--n, --npm <pattern>  run matching npm scripts from package.json
+-n, --npm <pattern>      run matching npm scripts from package.json
 """ + "\n"
 
 spawned = []
-triggerDirectories = []
+directories = []
 
-newTrigger = ->
-  directory = path.join os.tmpdir(), "parallelshell-#{process.pid}-#{Date.now()}-#{triggerDirectories.length}"
+newDirectory = ->
+  directory = path.join os.tmpdir(), "parallelshell-#{process.pid}-#{Date.now()}-#{directories.length}"
   fs.mkdirSync directory
-  triggerDirectories.push directory
-  path.join directory, TRIGGER_NAME
+  directories.push directory
+  directory
+
+newTrigger = -> path.join newDirectory(), TRIGGER_NAME
 
 release = (trigger) -> fs.writeFileSync trigger, ""
 
@@ -107,27 +111,31 @@ isAlive = (pid) ->
 doneCount = (ps) ->
   outputLines(ps).filter((line) -> line == DONE_LINE).length
 
+shouldRejectBeforeLaunch = (ps, message) ->
+  ps.exited.then (result) ->
+    result.code.should.equal 1
+    ps.output.should.equal ""
+    ps.errorOutput.should.contain message
+
 afterEach ->
   for ps in spawned.splice(0)
     if WINDOWS
       childProcess.spawnSync "taskkill", ["/T", "/F", "/PID", String ps.pid] if ps.exitCode == null and ps.signalCode == null
     else if isAlive -ps.pid
       process.kill -ps.pid, "SIGKILL"
-  for directory in triggerDirectories.splice(0)
-    trigger = path.join directory, TRIGGER_NAME
-    fs.unlinkSync trigger if fs.existsSync trigger
-    manifest = path.join directory, "package.json"
-    fs.unlinkSync manifest if fs.existsSync manifest
-    npmLog = path.join directory, "npm-debug.log"
-    fs.unlinkSync npmLog if fs.existsSync npmLog
+  for directory in directories.splice(0)
+    for name in [TRIGGER_NAME].concat PACKAGE_FILES
+      file = path.join directory, name
+      fs.unlinkSync file if fs.existsSync file
     fs.rmdirSync directory
 
 describe "parallelshell", ->
   describe "npm scripts", ->
-    scriptNames = ["build:js", "build:css", "build:html", "test:js", ".hidden", "#hash", "!bang", "literal*", "two words", "quote\"name", "amp&name", "percent%PATH%", "nested/build/js"]
+    literalNames = ["literal*", "#hash", "!bang", "two words", "quote\"name", "amp&name", "percent%PATH%"]
+    scriptNames = ["build:js", "build:css", "build:html", "test:js", ".hidden", "nested/build/js"].concat literalNames
 
     project = (scripts) ->
-      directory = path.dirname newTrigger()
+      directory = newDirectory()
       fs.writeFileSync path.join(directory, "package.json"), JSON.stringify {name: "parallelshell-fixture", version: "1.0.0", scripts}
       directory
 
@@ -138,6 +146,8 @@ describe "parallelshell", ->
       project scripts
 
     runScripts = (args...) -> spawnParallelshellWith {cwd: npmProject()}, args...
+
+    scriptLines = (ps) -> outputLines(ps).filter((line) -> line.indexOf("script ") == 0).sort()
 
     ["-n", "--npm"].forEach (flag) ->
       it "should run an exact npm script with #{flag}", ->
@@ -153,14 +163,9 @@ describe "parallelshell", ->
       "build:{js,css}": ["build:js", "build:css"]
       "build:[ch]*": ["build:css", "build:html"]
       "build:+(js|css)": ["build:js", "build:css"]
-      "literal*": ["literal*"]
       ".*": [".hidden"]
-      "#hash": ["#hash"]
-      "!bang": ["!bang"]
-      "two words": ["two words"]
-      "quote\"name": ["quote\"name"]
-      "amp&name": ["amp&name"]
-      "percent%PATH%": ["percent%PATH%"]
+      "#h*": ["#hash"]
+      "!b*": ["!bang"]
       "nested/**": ["nested/build/js"]
     }
     Object.keys(patterns).forEach (pattern) ->
@@ -168,10 +173,18 @@ describe "parallelshell", ->
         ps = runScripts "-n", pattern
         ps.exited.then (result) ->
           result.code.should.equal 0, ps.output + ps.errorOutput
-          outputLines(ps).filter((line) -> line.indexOf("script ") == 0).sort().should.deep.equal patterns[pattern].map((name) -> "script #{name}").sort()
+          scriptLines(ps).should.deep.equal patterns[pattern].map((name) -> "script #{name}").sort()
+
+    it "should run script names containing pattern and shell characters literally", ->
+      args = []
+      args.push "-n", name for name in literalNames
+      ps = runScripts args...
+      ps.exited.then (result) ->
+        result.code.should.equal 0, ps.output + ps.errorOutput
+        scriptLines(ps).should.deep.equal literalNames.map((name) -> "script #{name}").sort()
 
     it "should mix repeated npm options with ordinary commands and existing options", ->
-      ps = runScripts "-w", "-n", "build:js", "echo ordinary", "--npm", "build:css", "-t", String(COMPLETION_TIMEOUT_SECONDS)
+      ps = runScripts "-w", "-n", "build:js", "echo ordinary", "--npm", "build:css", "-t", COMPLETION_TIMEOUT_SECONDS
       ps.exited.then (result) ->
         result.code.should.equal 0
         outputLines(ps).should.include.members ["ordinary", "script build:js", "script build:css"]
@@ -192,51 +205,47 @@ describe "parallelshell", ->
       ps = spawnParallelshellWith {cwd: project({fail: exitProcess(FAILURE_EXIT_CODE)})}, "-n", "fail"
       ps.exited.then (result) -> result.code.should.not.equal 0
 
+    it "should fail once when npm is not on PATH", ->
+      env = {}
+      env[name] = value for name, value of process.env when name.toUpperCase() != "PATH"
+      env.PATH = newDirectory()
+      ps = spawnParallelshellWith {cwd: npmProject(), env}, "-w", "-v", "-n", "build:js"
+      ps.exited.then (result) ->
+        result.code.should.equal 1
+        hasLineEndingWith(SUCCESS_SUFFIX)(ps).should.be.false
+
     [undefined, "", "-w", "missing", "missing:*"].forEach (pattern) ->
       it "should reject #{pattern} before launching any command", ->
         args = ["echo ordinary", "-n", "build:js", "-n"]
         args.push pattern if pattern != undefined
-        ps = runScripts args...
-        ps.exited.then (result) ->
-          result.code.should.equal 1
-          ps.output.should.equal ""
-          ps.errorOutput.should.contain "--npm"
+        shouldRejectBeforeLaunch runScripts(args...), "--npm"
 
     [null, [], {bad: 42}].forEach (scripts) ->
       it "should reject missing or invalid script definitions #{JSON.stringify scripts}", ->
-        ps = spawnParallelshellWith {cwd: project(scripts)}, "echo ordinary", "-n", "bad"
-        ps.exited.then (result) ->
-          result.code.should.equal 1
-          ps.output.should.equal ""
-          ps.errorOutput.should.contain "--npm"
+        shouldRejectBeforeLaunch spawnParallelshellWith({cwd: project(scripts)}, "echo ordinary", "-n", "bad"), "--npm"
 
     it "should reject invalid package JSON before launching commands", ->
       directory = project {}
       fs.writeFileSync path.join(directory, "package.json"), "{"
-      ps = spawnParallelshellWith {cwd: directory}, "echo ordinary", "-n", "build"
-      ps.exited.then (result) ->
-        result.code.should.equal 1
-        ps.output.should.equal ""
-        ps.errorOutput.should.contain "--npm"
+      shouldRejectBeforeLaunch spawnParallelshellWith({cwd: directory}, "echo ordinary", "-n", "build"), "--npm"
 
     it "should reject a missing package.json before launching commands", ->
-      ps = spawnParallelshellWith {cwd: path.dirname(newTrigger())}, "echo ordinary", "-n", "build"
+      shouldRejectBeforeLaunch spawnParallelshellWith({cwd: newDirectory()}, "echo ordinary", "-n", "build"), "--npm"
+
+  it "should stop running commands at the deadline", ->
+    ps = spawnParallelshell "--timeout", TIMEOUT_SECONDS, succeedingProcess, waitingProcess(), waitingProcess()
+    waitForReady(ps, 2).then (pids) ->
       ps.exited.then (result) ->
-        result.code.should.equal 1
-        ps.output.should.equal ""
-        ps.errorOutput.should.contain "--npm"
+        result.should.deep.equal {code: TIMEOUT_EXIT_CODE, signal: null}
+        ps.errorOutput.should.contain "timed out after #{TIMEOUT_SECONDS} seconds"
+        pids.filter(isAlive).should.be.empty
 
   ["-t", "--timeout"].forEach (flag) ->
-    it "should stop running commands at the deadline with #{flag}", ->
-      ps = spawnParallelshell flag, String(TIMEOUT_SECONDS), succeedingProcess, waitingProcess(), waitingProcess()
-      waitForReady(ps, 2).then (pids) ->
-        ps.exited.then (result) ->
-          result.should.deep.equal {code: TIMEOUT_EXIT_CODE, signal: null}
-          ps.errorOutput.should.contain "timed out after #{TIMEOUT_SECONDS} seconds"
-          pids.filter(isAlive).should.be.empty
+    it "should accept fractional timeout seconds with #{flag}", ->
+      spawnParallelshell(flag, FRACTIONAL_TIMEOUT_SECONDS, waitingProcess()).exited.then (result) -> result.code.should.equal TIMEOUT_EXIT_CODE
 
   it "should time out with --wait and preserve an earlier failure", ->
-    ps = spawnParallelshell "--wait", "-v", "--timeout", String(TIMEOUT_SECONDS), exitProcess(FAILURE_EXIT_CODE), waitingProcess()
+    ps = spawnParallelshell "--wait", "-v", "--timeout", TIMEOUT_SECONDS, exitProcess(FAILURE_EXIT_CODE), waitingProcess()
     Promise.all [waitForReady(ps, 1), waitForOutput(ps, hasLineEndingWith ERRORED_SUFFIX)]
     .then ([pids]) ->
       ps.exited.then (result) ->
@@ -245,42 +254,28 @@ describe "parallelshell", ->
         pids.filter(isAlive).should.be.empty
 
   it "should time out successful commands that remain running with --wait", ->
-    ps = spawnParallelshell "--wait", "--timeout", String(TIMEOUT_SECONDS), waitingProcess()
+    ps = spawnParallelshell "--wait", "--timeout", FRACTIONAL_TIMEOUT_SECONDS, waitingProcess()
     ps.exited.then (result) -> result.code.should.equal TIMEOUT_EXIT_CODE
 
-  it "should cancel a timeout when every command finishes", ->
-    ps = spawnParallelshell "--timeout", String(COMPLETION_TIMEOUT_SECONDS), succeedingProcess, succeedingProcess
-    ps.exited.then (result) ->
-      result.code.should.equal 0
-      ps.errorOutput.should.equal ""
-
-  it "should cancel a timeout when a command fails", ->
-    ps = spawnParallelshell "--timeout", String(COMPLETION_TIMEOUT_SECONDS), exitProcess FAILURE_EXIT_CODE
-    ps.exited.then (result) ->
-      result.code.should.equal FAILURE_EXIT_CODE
-      ps.errorOutput.should.not.contain "timed out"
-
-  it "should retain the failure code when all commands finish with --wait", ->
-    ps = spawnParallelshell "--wait", "--timeout", String(COMPLETION_TIMEOUT_SECONDS), exitProcess(FAILURE_EXIT_CODE), succeedingProcess
-    ps.exited.then (result) ->
-      result.code.should.equal FAILURE_EXIT_CODE
-      ps.errorOutput.should.not.contain "timed out"
-
-  it "should exit successfully with a timeout and no commands", ->
-    spawnParallelshell("--timeout", String(COMPLETION_TIMEOUT_SECONDS)).exited.then (result) -> result.code.should.equal 0
-
-  it "should accept fractional timeout seconds", ->
-    spawnParallelshell("--timeout", "0.001", waitingProcess()).exited.then (result) -> result.code.should.equal TIMEOUT_EXIT_CODE
+  completions = {
+    "every command finishes": [[succeedingProcess, succeedingProcess], 0]
+    "a command fails": [[exitProcess FAILURE_EXIT_CODE], FAILURE_EXIT_CODE]
+    "all commands finish with --wait after a failure": [["--wait", exitProcess(FAILURE_EXIT_CODE), succeedingProcess], FAILURE_EXIT_CODE]
+    "there are no commands": [[], 0]
+  }
+  Object.keys(completions).forEach (description) ->
+    [args, code] = completions[description]
+    it "should exit without timing out when #{description}", ->
+      ps = spawnParallelshell "--timeout", COMPLETION_TIMEOUT_SECONDS, args...
+      ps.exited.then (result) ->
+        result.code.should.equal code
+        ps.errorOutput.should.equal ""
 
   [undefined, "0", "-1", "nope", "Infinity", "2147483.648", "--wait"].forEach (value) ->
     it "should reject invalid timeout #{value} before launching commands", ->
       args = [succeedingProcess, "--timeout"]
       args.push value if value != undefined
-      ps = spawnParallelshell args...
-      ps.exited.then (result) ->
-        result.code.should.equal 1
-        ps.output.should.equal ""
-        ps.errorOutput.should.contain "--timeout requires positive seconds"
+      shouldRejectBeforeLaunch spawnParallelshell(args...), "--timeout requires positive seconds"
 
   it "should print on -h and --help", ->
     Promise.all ["-h", "--help"].map (flag) ->
@@ -371,7 +366,7 @@ describe "parallelshell", ->
 
   FORWARDED_SIGNALS.forEach (signal) ->
     onPosix "should stop its children with #{signal} and die by #{signal} without crashing", ->
-      ps = spawnParallelshell "--timeout", String(COMPLETION_TIMEOUT_SECONDS), waitingProcess(), waitingProcess()
+      ps = spawnParallelshell "--timeout", COMPLETION_TIMEOUT_SECONDS, waitingProcess(), waitingProcess()
       waitForReady(ps, 2).then (pids) ->
         ps.kill signal
         ps.exited.then (result) ->
