@@ -32,6 +32,15 @@ TIMEOUT_EXIT_CODE = 124
 COMPLETION_TIMEOUT_SECONDS = "60"
 FRACTIONAL_TIMEOUT_SECONDS = "0.001"
 PACKAGE_FILES = ["package.json", "npm-debug.log"]
+COLOR_VARIABLES = ["FORCE_COLOR", "NO_COLOR", "CLICOLOR_FORCE"]
+IGNORED_SIGNAL = "SIGINT"
+SIGPIPE_EXIT_CODE = SIGNAL_EXIT_CODE_BASE + signals.SIGPIPE
+MANY_COMMANDS = 11
+FAILURE_OUTPUT_LINES = 2000
+POLL_INTERVAL_MS = 20
+MAX_POLLS = 250
+STOPPED_STATE = "T"
+ZOMBIE_STATE = "Z"
 
 fixture = (name, args...) -> [process.execPath, path.join(FIXTURES_DIR, name)].concat(args).join " "
 exitProcess = (code) -> fixture "exit.js", code
@@ -39,6 +48,7 @@ failingProcess = exitProcess 1
 succeedingProcess = exitProcess 0
 printCwdProcess = "#{process.execPath} -p \"process.cwd()\""
 printEnvProcess = "#{process.execPath} -p process.env.#{ENV_NAME}"
+evalProcess = (source) -> "#{process.execPath} -e \"#{source}\""
 
 usageInfo = """
 -h, --help               output usage information
@@ -46,6 +56,8 @@ usageInfo = """
 -w, --wait               will not close sibling processes on error
 -t, --timeout <seconds>  stop remaining commands after the deadline
 -n, --npm <pattern>      run matching npm scripts from package.json
+-p, --prefix             prefix each output line with its command's label
+-l, --label <name>       label the next command, implies --prefix
 """ + "\n"
 
 spawned = []
@@ -59,9 +71,44 @@ newDirectory = ->
 
 newTrigger = -> path.join newDirectory(), TRIGGER_NAME
 
+project = (scripts) ->
+  directory = newDirectory()
+  fs.writeFileSync path.join(directory, "package.json"), JSON.stringify {name: "parallelshell-fixture", version: "1.0.0", scripts}
+  directory
+
 release = (trigger) -> fs.writeFileSync trigger, ""
 
-waitingProcess = (trigger = newTrigger(), code = 0) -> fixture "waiting.js", trigger, code
+waitingProcess = (trigger = newTrigger(), code = 0, ignoredSignal = "") -> fixture "waiting.js", trigger, code, ignoredSignal
+
+hex = (text) -> Buffer.from(text).toString "hex"
+
+stagedProcess = (stages...) ->
+  fixture "staged-output.js", [].concat(([trigger, hex text] for [trigger, text] in stages)...)...
+
+colorEnv = (overrides = {}) ->
+  env = {}
+  env[name] = value for name, value of process.env when name not in COLOR_VARIABLES
+  Object.assign env, overrides
+
+waitUntil = (predicate) ->
+  new Promise (resolve, reject) ->
+    polls = 0
+    poll = ->
+      return resolve() if predicate()
+      polls++
+      return reject new Error "condition not met after #{MAX_POLLS} polls" if polls >= MAX_POLLS
+      setTimeout poll, POLL_INTERVAL_MS
+    poll()
+
+processState = (pid) ->
+  procStat = "/proc/#{pid}/stat"
+  try
+    if fs.existsSync "/proc"
+      fs.readFileSync(procStat, "utf8").split(") ").pop().charAt 0
+    else
+      childProcess.execFileSync("ps", ["-o", "stat=", "-p", String pid], {stdio: ["ignore", "pipe", "ignore"]}).toString().trim().charAt 0
+  catch
+    ""
 
 track = (ps) ->
   ps.output = ""
@@ -92,8 +139,8 @@ waitForOutput = (ps, predicate) ->
 
 readyPids = (ps) ->
   outputLines(ps)
-    .filter (line) -> line.indexOf(READY_PREFIX) == 0
-    .map (line) -> Number line.slice READY_PREFIX.length
+    .filter (line) -> line.indexOf(READY_PREFIX) != -1
+    .map (line) -> Number line.slice line.indexOf(READY_PREFIX) + READY_PREFIX.length
 
 waitForReady = (ps, count) ->
   waitForOutput(ps, -> readyPids(ps).length >= count).then -> readyPids ps
@@ -104,9 +151,15 @@ hasLineEndingWith = (suffix) -> (ps) ->
 isAlive = (pid) ->
   try
     process.kill pid, 0
-    true
   catch error
-    error.code != "ESRCH"
+    return error.code != "ESRCH"
+  WINDOWS or processState(pid) not in [ZOMBIE_STATE, ""]
+
+processExited = (ps) -> ps.exitCode != null or ps.signalCode != null
+
+exitedProcess = (ps) ->
+  new Promise (resolve) ->
+    if processExited ps then resolve() else ps.on "exit", resolve
 
 doneCount = (ps) ->
   outputLines(ps).filter((line) -> line == DONE_LINE).length
@@ -120,9 +173,9 @@ shouldRejectBeforeLaunch = (ps, message) ->
 afterEach ->
   for ps in spawned.splice(0)
     if WINDOWS
-      childProcess.spawnSync "taskkill", ["/T", "/F", "/PID", String ps.pid] if ps.exitCode == null and ps.signalCode == null
-    else if isAlive -ps.pid
-      process.kill -ps.pid, "SIGKILL"
+      childProcess.spawnSync "taskkill", ["/T", "/F", "/PID", String ps.pid] unless processExited ps
+    else unless processExited ps
+      ps.kill "SIGKILL"
   for directory in directories.splice(0)
     for name in [TRIGGER_NAME].concat PACKAGE_FILES
       file = path.join directory, name
@@ -133,11 +186,6 @@ describe "parallelshell", ->
   describe "npm scripts", ->
     literalNames = ["literal*", "#hash", "!bang", "two words", "quote\"name", "amp&name", "percent%PATH%"]
     scriptNames = ["build:js", "build:css", "build:html", "test:js", ".hidden", "nested/build/js"].concat literalNames
-
-    project = (scripts) ->
-      directory = newDirectory()
-      fs.writeFileSync path.join(directory, "package.json"), JSON.stringify {name: "parallelshell-fixture", version: "1.0.0", scripts}
-      directory
 
     npmProject = ->
       scripts = {}
@@ -231,6 +279,105 @@ describe "parallelshell", ->
 
     it "should reject a missing package.json before launching commands", ->
       shouldRejectBeforeLaunch spawnParallelshellWith({cwd: newDirectory()}, "echo ordinary", "-n", "build"), "--npm"
+
+  describe "prefixed output", ->
+    buildScripts = {"build:js": "echo built", "build:css": "echo styled"}
+    spawnPrefixed = (args...) -> spawnParallelshellWith {env: colorEnv()}, args...
+    printBoth = evalProcess "console.log('out'); console.error('err')"
+
+    ["-p", "--prefix"].forEach (flag) ->
+      it "should label lines with shortened command text with #{flag}", ->
+        ps = spawnPrefixed flag, "echo ordinary", "echo short"
+        ps.exited.then (result) ->
+          result.code.should.equal 0
+          outputLines(ps).should.include.members ["echo..nary | ordinary", "echo short | short"]
+
+    ["-l", "--label"].forEach (flag) ->
+      it "should pad labels, keep stderr on stderr and imply --prefix with #{flag}", ->
+        ps = spawnPrefixed flag, "api", printBoth, flag, "worker", "echo second"
+        ps.exited.then (result) ->
+          result.code.should.equal 0
+          outputLines(ps).should.include.members ["api    | out", "worker | second"]
+          ps.errorOutput.split(LINE_BREAK).should.include "api    | err"
+          ps.output.should.not.contain "err"
+
+    it "should label npm scripts with their names", ->
+      directory = project buildScripts
+      ps = spawnParallelshellWith {cwd: directory, env: colorEnv()}, "-p", "-n", "build:*", "-l", "custom", "-n", "build:js"
+      ps.exited.then (result) ->
+        result.code.should.equal 0
+        outputLines(ps).should.include.members ["build:js  | built", "build:css | styled", "custom    | built"]
+
+    [
+      ["FORCE_COLOR=1", {FORCE_COLOR: "1"}, true]
+      ["FORCE_COLOR=1 over NO_COLOR=1", {FORCE_COLOR: "1", NO_COLOR: "1"}, true]
+      ["FORCE_COLOR=0", {FORCE_COLOR: "0"}, false]
+      ["NO_COLOR=1", {NO_COLOR: "1"}, false]
+      ["a pipe", {}, false]
+    ].forEach ([description, overrides, colored]) ->
+      it "should #{if colored then "" else "not "}color labels with #{description}", ->
+        ps = spawnParallelshellWith {env: colorEnv overrides}, "-l", "a", "echo first", "-l", "b", "echo second"
+        ps.exited.then ->
+          lines = outputLines ps
+          if colored
+            lines.should.include.members ["\u001b[36ma | \u001b[0mfirst", "\u001b[33mb | \u001b[0msecond"]
+          else
+            lines.should.include.members ["a | first", "b | second"]
+
+    it "should finish another command's partial line before interleaving", ->
+      triggers = (newTrigger() for index in [0..2])
+      ps = spawnPrefixed "-l", "a", stagedProcess([triggers[0], "part"], [triggers[2], "ial\n"]), "-l", "b", stagedProcess([triggers[1], "line\n"])
+      release triggers[0]
+      waitForOutput(ps, -> ps.output == "a | part").then ->
+        release triggers[1]
+        waitForOutput ps, -> ps.output.endsWith "b | line\n"
+      .then ->
+        release triggers[2]
+        ps.exited
+      .then (result) ->
+        result.code.should.equal 0
+        ps.output.should.equal "a | part\nb | line\na | ial\n"
+
+    it "should prefix after carriage returns and keep split CRLF line endings", ->
+      triggers = [newTrigger(), newTrigger()]
+      ps = spawnPrefixed "-l", "a", stagedProcess([triggers[0], "10%\r20%\r"], [triggers[1], "\ndone\r\n"])
+      release triggers[0]
+      waitForOutput(ps, -> ps.output == "a | 10%\ra | 20%").then ->
+        release triggers[1]
+        ps.exited
+      .then (result) ->
+        result.code.should.equal 0
+        ps.output.should.equal "a | 10%\ra | 20%\r\na | done\r\n"
+
+    it "should relay many commands without listener warnings", ->
+      ps = spawnPrefixed "-p", ("echo #{index}" for index in [1..MANY_COMMANDS])...
+      ps.exited.then (result) ->
+        result.code.should.equal 0
+        ps.errorOutput.should.equal ""
+        outputLines(ps).filter((line) -> line.indexOf(" | ") != -1).length.should.equal MANY_COMMANDS
+
+    it "should relay all of a failing command's output before exiting", ->
+      failing = evalProcess "for (var line = 0; line < #{FAILURE_OUTPUT_LINES}; line++) console.error('line ' + line); process.exitCode = #{FAILURE_EXIT_CODE}"
+      ps = spawnPrefixed "-l", "f", failing, waitingProcess()
+      ps.exited.then (result) ->
+        result.code.should.equal FAILURE_EXIT_CODE
+        ps.errorOutput.split(LINE_BREAK).filter((line) -> line.indexOf("f") == 0).length.should.equal FAILURE_OUTPUT_LINES
+
+    onPosix "should stop its commands and exit with the SIGPIPE status when its output closes", ->
+      ps = spawnPrefixed "-p", "yes", waitingProcess()
+      waitForOutput(ps, -> ps.output.length > 0).then ->
+        ps.stdout.destroy()
+        ps.exited
+      .then (result) ->
+        result.code.should.equal SIGPIPE_EXIT_CODE
+
+    [["-l"], ["-l", "-w", "echo ordinary"], ["-l", "a"], ["-l", "a", "-l", "b", "echo ordinary"]].forEach (args) ->
+      it "should reject #{JSON.stringify args} before launching any command", ->
+        shouldRejectBeforeLaunch spawnPrefixed(["echo ordinary"].concat(args)...), "--label requires a name followed by a command"
+
+    it "should reject a label for a pattern matching several npm scripts", ->
+      directory = project buildScripts
+      shouldRejectBeforeLaunch spawnParallelshellWith({cwd: directory}, "echo ordinary", "-l", "all", "-n", "build:*"), "--label names one command"
 
   it "should stop running commands at the deadline", ->
     ps = spawnParallelshell "--timeout", TIMEOUT_SECONDS, succeedingProcess, waitingProcess(), waitingProcess()
@@ -413,7 +560,7 @@ describe "parallelshell", ->
       result.code.should.equal SIGNAL_EXIT_CODE_BASE + signals.SIGINT
 
   it "should run a command containing double quotes as written", ->
-    ps = spawnParallelshell "#{process.execPath} -e \"console.log('#{QUOTED_TEXT}')\""
+    ps = spawnParallelshell evalProcess "console.log('#{QUOTED_TEXT}')"
     ps.exited.then (result) ->
       result.code.should.equal 0
       outputLines(ps)[0].should.equal QUOTED_TEXT
@@ -426,6 +573,77 @@ describe "parallelshell", ->
     ps.exited.then (result) ->
       ps.errorOutput.should.equal ""
       result.code.should.equal 0
+
+  onPosix "should run compound commands and stop them when a sibling fails", ->
+    trigger = newTrigger()
+    compound = "export #{ENV_NAME}=#{ENV_VALUE} && cd \"#{FIXTURES_DIR}\" && #{printEnvProcess} && #{printCwdProcess} && #{waitingProcess()}"
+    ps = spawnParallelshell compound, waitingProcess(trigger, FAILURE_EXIT_CODE)
+    waitForReady(ps, 2).then (pids) ->
+      release trigger
+      ps.exited.then (result) ->
+        result.code.should.equal FAILURE_EXIT_CODE
+        outputLines(ps).should.include.members [ENV_VALUE, FIXTURES_DIR]
+        pids.filter(isAlive).should.be.empty
+
+  it "should stop an npm script's command when a sibling fails", ->
+    trigger = newTrigger()
+    ps = spawnParallelshellWith {cwd: project({serve: waitingProcess()})}, "-n", "serve", waitingProcess(trigger, FAILURE_EXIT_CODE)
+    waitForReady(ps, 2).then (pids) ->
+      release trigger
+      ps.exited.then (result) ->
+        result.code.should.equal FAILURE_EXIT_CODE
+        pids.filter(isAlive).should.be.empty
+
+  [[], ["--prefix"]].forEach (options) ->
+    onPosix "should stop a background process a command left running when a sibling fails#{if options.length then " with " + options else ""}", ->
+      trigger = newTrigger()
+      ps = spawnParallelshell options.concat(["#{waitingProcess(newTrigger(), 0, IGNORED_SIGNAL)} &", waitingProcess(trigger, FAILURE_EXIT_CODE)])...
+      waitForReady(ps, 2).then (pids) ->
+        release trigger
+        ps.exited.then (result) ->
+          result.code.should.equal FAILURE_EXIT_CODE
+          waitUntil -> pids.filter(isAlive).length == 0
+
+  onPosix "should leave a background process running when every command finishes", ->
+    trigger = newTrigger()
+    ps = spawnParallelshell "#{waitingProcess(trigger)} &"
+    waitForReady(ps, 1).then ([pid]) ->
+      exitedProcess(ps).then ->
+        ps.exitCode.should.equal 0
+        isAlive(pid).should.be.true
+        release trigger
+        waitForOutput ps, -> doneCount(ps) == 1
+
+  onPosix "should stop its commands when it is killed with SIGKILL", ->
+    ps = spawnParallelshell waitingProcess(), waitingProcess()
+    waitForReady(ps, 2).then (pids) ->
+      ps.kill "SIGKILL"
+      waitUntil -> pids.filter(isAlive).length == 0
+
+  onPosix "should stop and resume its commands with SIGTSTP and SIGCONT", ->
+    trigger = newTrigger()
+    ps = spawnParallelshell waitingProcess(trigger)
+    waitForReady(ps, 1).then ([pid]) ->
+      ps.kill "SIGTSTP"
+      waitUntil(-> processState(pid) == STOPPED_STATE and processState(ps.pid) == STOPPED_STATE).then ->
+        ps.kill "SIGCONT"
+        waitUntil -> processState(pid) != STOPPED_STATE and processState(ps.pid) != STOPPED_STATE
+    .then ->
+      release trigger
+      ps.exited
+    .then (result) ->
+      result.code.should.equal 0
+
+  onWindows "should finish with --prefix when a command's background process keeps its output open", ->
+    backgroundTrigger = newTrigger()
+    trigger = newTrigger()
+    ps = spawnParallelshell "--prefix", "start /b \"\" #{waitingProcess(backgroundTrigger)}", waitingProcess(trigger, FAILURE_EXIT_CODE)
+    waitForReady(ps, 2).then (pids) ->
+      release trigger
+      exitedProcess(ps).then ->
+        ps.exitCode.should.equal FAILURE_EXIT_CODE
+        release backgroundTrigger
+        waitUntil -> pids.filter(isAlive).length == 0
 
   onWindows "should stop its children and exit with the Ctrl+C status on Ctrl+C", ->
     ps = track childProcess.spawn "powershell", POWERSHELL_ARGS.concat ["-File", CTRL_C_HELPER, process.execPath, PARALLELSHELL_PATH, waitingProcess(), waitingProcess()]

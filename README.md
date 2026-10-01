@@ -1,8 +1,9 @@
 ## Parallel Shell
 
 This is a super simple npm module to run shell commands in parallel. All
-processes will share the same stdout/stderr, and if any command exits with a
-non-zero exit status, the rest are stopped and the exit code carries through.
+processes will share the same stdout/stderr, optionally with every line labelled,
+and if any command exits with a non-zero exit status, the rest are stopped and
+the exit code carries through.
 
 ### Version compatibility notes
 
@@ -69,6 +70,8 @@ Available options:
 -w, --wait               will not close sibling processes on error
 -t, --timeout <seconds>  stop remaining commands after the deadline
 -n, --npm <pattern>      run matching npm scripts from package.json
+-p, --prefix             prefix each output line with its command's label
+-l, --label <name>       label the next command, implies --prefix
 ```
 
 Use `-n` (or `--npm`) before each npm script name or
@@ -94,4 +97,69 @@ parallelshell --timeout 10 "node server.js" "node request.js"
 
 On timeout parallelshell exits with code 124, or with an earlier failure's code
 under `--wait`. Commands are stopped the same way as on failure, so on Unix a
-command that ignores SIGINT can outlive the deadline.
+command that ignores SIGTERM can outlive the deadline.
+
+### Prefixed output
+
+Use `-p` (or `--prefix`) to start every line with the command it came from, like
+`docker compose` does. Put `-l` (or `--label`) before a command to name it, which
+turns on `--prefix` by itself:
+
+```bash
+parallelshell -l api "node server.js" -l web "npm run watch"
+```
+
+```
+api | listening on port 3000
+web | compiled in 120ms
+```
+
+npm scripts are labelled with their name, other commands with their text
+shortened to 10 characters. A label names one command, so it can't go before an
+`-n` pattern matching several scripts. Labels are padded to the same width, each
+command gets its own color and stderr lines stay on stderr. A line that isn't
+finished yet shows up right away. If another command prints in the meantime, it
+carries on in a new line with its label.
+
+Colors are used when the output is a terminal. `NO_COLOR` turns them off and
+`FORCE_COLOR` turns them on (`FORCE_COLOR=0` turns them off).
+
+To label lines parallelshell reads each command's output through a pipe, so
+commands no longer see a terminal:
+
+* When the labels are colored, commands get `FORCE_COLOR` and `CLICOLOR_FORCE`
+  (unless you set them) so chalk based tools, npm, jest or macOS `ls` stay
+  colored. Tools that ignore both, like git or cargo, need their own flag such as
+  `--color=always`. Everything a command starts sees these variables too, so
+  output written to a file can end up with color codes: set `FORCE_COLOR=0` to
+  avoid that.
+* Progress bars, spinners and interactive modes that need a terminal are turned
+  off by the tools themselves.
+* Python and Ruby buffer their output when it isn't a terminal, so it can show up
+  late. Set `PYTHONUNBUFFERED=1` for Python and `$stdout.sync = true` in Ruby.
+
+### Stopping commands
+
+On Unix every command runs in its own process group and parallelshell stops the
+whole group. Ctrl+C, SIGTERM and SIGHUP are passed on as they are. A failing
+command, the `--timeout` deadline or closed output stop the others with SIGTERM.
+Background processes a command left behind get SIGTERM too. That reaches the
+commands behind `npm run` as well. Commands can use any shell syntax, like
+`export PORT=3000 && cd api && npm start`.
+
+* parallelshell exits once everything it stopped is gone, even when a command's
+  shell ends before the processes it started. Only daemons that close every
+  inherited file descriptor aren't waited for.
+* Ctrl+Z pauses every command and `fg` resumes them.
+* If parallelshell is killed with SIGKILL, a small helper stops the commands.
+* When every command finishes by itself, background processes they started keep
+  running.
+* Commands can't read from the terminal, so password prompts fail right away
+  instead of hanging. Use the non-interactive options instead: `sudo -A` with
+  `SUDO_ASKPASS` for sudo. `SSH_ASKPASS` with `SSH_ASKPASS_REQUIRE=force` or
+  ssh-agent for ssh. `GIT_ASKPASS` or a credential helper for git.
+
+On Windows parallelshell stops each command's process tree with `taskkill`. A
+process started with `start /b` by a command that already exited is outside that
+tree and keeps running. With `--prefix` parallelshell stops waiting for its
+output.

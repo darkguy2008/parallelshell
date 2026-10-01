@@ -1,17 +1,13 @@
 'use strict';
-var fs = require('fs');
-var path = require('path');
+var whenTriggered = require('./trigger');
 
 var trigger = process.argv[2];
 var code = Number(process.argv[3]);
+var ignoredSignal = process.argv[4];
 
-function exitIfTriggered () {
-    if (fs.existsSync(trigger)) {
-        console.log('done');
-        process.exit(code);
-    }
-}
-
-fs.watch(path.dirname(trigger), exitIfTriggered);
+if (ignoredSignal) process.on(ignoredSignal, function () {});
 console.log('ready ' + process.pid);
-exitIfTriggered();
+whenTriggered(trigger, function () {
+    console.log('done');
+    process.exit(code);
+});
