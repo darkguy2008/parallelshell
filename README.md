@@ -5,11 +5,7 @@ processes will share the same stdout/stderr, optionally with every line labelled
 and if any command exits with a non-zero exit status, the rest are stopped and
 the exit code carries through.
 
-### Version compatibility notes
-
-* Tested on Node 4 and later on Linux, macOS and Windows.
-
-### Maintenance has been resumed by [@darkguy2008](https://github.com/darkguy2008). However, there are also better options, see [Consolidation of multiple similar libraries](https://github.com/mysticatea/npm-run-all/issues/10).
+### Maintenance has been resumed by [@darkguy2008](https://github.com/darkguy2008) and it's compatible with Node 4 and later on Linux and Windows (Node 16 and later on macOS).
 
 ### Motivation
 
