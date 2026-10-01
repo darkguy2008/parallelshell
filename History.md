@@ -1,3 +1,20 @@
+### v4.0.0
+ - [#46](https://github.com/darkguy2008/parallelshell/issues/46) Add
+   `-p, --prefix` to label every output line with its command and
+   `-l, --label <name>` to name a command, with colored labels like
+   `docker compose`.
+ - [#22](https://github.com/darkguy2008/parallelshell/issues/22) Stop the
+   commands behind `npm run` too: on Unix each command runs in its own process
+   group and parallelshell stops the whole group.
+ - [#28](https://github.com/darkguy2008/parallelshell/issues/28) Run commands
+   without `exec`, so `export`, `cd` and `a && b` work.
+ - Stop background processes a command left behind and wait for every stopped
+   process before exiting. Ctrl+Z and `fg` pause and resume commands. Commands
+   are stopped even if parallelshell itself is killed.
+ - Breaking: a failing command, `--timeout` and closed output now stop the
+   others with SIGTERM instead of SIGINT. Commands can't read from the terminal
+   anymore (use askpass or credential helpers for passwords).
+
 ### v3.2.1
  - [#31](https://github.com/darkguy2008/parallelshell/issues/31) Report a
    missing npm once instead of also marking the script as successful.
